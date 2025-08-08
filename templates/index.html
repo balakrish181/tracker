@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mole Analysis Tool</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <style>
+        .loading {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+        }
+        .loading-content {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 2rem;
+            border-radius: 0.5rem;
+            text-align: center;
+        }
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 1rem;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <!-- Loading Overlay -->
+    <div id="loading" class="loading">
+        <div class="loading-content">
+            <div class="spinner"></div>
+            <p class="text-lg font-semibold">Analyzing mole image...</p>
+        </div>
+    </div>
+
+    <div class="container mx-auto px-4 py-8">
+        <h1 class="text-4xl font-bold text-center mb-8 text-gray-800">Mole Analysis Tool</h1>
+        
+        <!-- Upload Section -->
+        <div class="max-w-2xl mx-auto bg-white rounded-lg shadow-md p-6 mb-8">
+            <div class="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
+                <form id="uploadForm" class="space-y-4">
+                    <div class="flex items-center justify-center">
+                        <label class="cursor-pointer bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded-lg transition duration-200 mr-4">
+                            Analyze Full Body
+                            <input type="file" class="hidden" id="fullBodyFileInput" accept=".jpg,.jpeg,.png">
+                        </label>
+                        <label class="cursor-pointer bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg transition duration-200">
+                            Analyze Single Mole
+                            <input type="file" class="hidden" id="singleMoleFileInput" accept=".jpg,.jpeg,.png">
+                        </label>
+                    </div>
+                    <p class="text-gray-500 text-sm">Supported formats: JPG, JPEG, PNG</p>
+                </form>
+            </div>
+        </div>
+
+        <!-- Results Section -->
+        <div id="results-container"></div>
+    </div>
+
+    <script>
+        document.getElementById('fullBodyFileInput').addEventListener('change', (e) => handleFileUpload(e, '/analyze_full_body'));
+        document.getElementById('singleMoleFileInput').addEventListener('change', (e) => handleFileUpload(e, '/analyze'));
+
+        async function handleFileUpload(e, endpoint) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('results-container').innerHTML = '';
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    if (endpoint === '/analyze_full_body') {
+                        displayFullBodyResults(data);
+                    } else {
+                        displaySingleMoleResult(data);
+                    }
+                } else {
+                    alert('Error: ' + data.error);
+                }
+            } catch (error) {
+                alert('Error analyzing image: ' + error.message);
+            } finally {
+                document.getElementById('loading').style.display = 'none';
+            }
+        }
+
+        function displayFullBodyResults(data) {
+            const container = document.getElementById('results-container');
+            const originalImageHtml = `
+                <div class="max-w-4xl mx-auto bg-white rounded-lg shadow-md p-6 mb-8">
+                    <h2 class="text-2xl font-semibold mb-4 text-gray-800">Original Full Body Image</h2>
+                    <img src="${data.original_image}" class="w-full rounded-lg shadow" alt="Full Body Image">
+                </div>
+            `;
+            container.innerHTML += originalImageHtml;
+
+            data.results.forEach(mole => {
+                const resultHtml = `
+                <div class="max-w-4xl mx-auto bg-white rounded-lg shadow-md p-6 mb-8">
+                    <h2 class="text-2xl font-semibold mb-4 text-gray-800">Mole ID: ${mole.mole_id}</h2>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <h3 class="font-medium text-gray-700 mb-2">Cropped Mole</h3>
+                            <img src="${mole.cropped_image_path}" class="w-full rounded-lg shadow" alt="Cropped Mole Image">
+                        </div>
+                        <div class="bg-gray-50 rounded-lg p-4">
+                            <h3 class="text-xl font-semibold mb-4 text-gray-800">ABCD Metrics</h3>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div class="bg-white p-4 rounded-lg shadow">
+                                    <h4 class="font-medium text-gray-600">Asymmetry</h4>
+                                    <p class="text-2xl font-bold text-blue-600">${mole.analysis.Asymmetry.toFixed(2)}</p>
+                                </div>
+                                <div class="bg-white p-4 rounded-lg shadow">
+                                    <h4 class="font-medium text-gray-600">Border</h4>
+                                    <p class="text-2xl font-bold text-blue-600">${mole.analysis.Border.toFixed(2)}</p>
+                                </div>
+                                <div class="bg-white p-4 rounded-lg shadow">
+                                    <h4 class="font-medium text-gray-600">Color</h4>
+                                    <p class="text-2xl font-bold text-blue-600">${mole.analysis.Colour.toFixed(2)}</p>
+                                </div>
+                                <div class="bg-white p-4 rounded-lg shadow">
+                                    <h4 class="font-medium text-gray-600">Diameter</h4>
+                                    <p class="text-2xl font-bold text-blue-600">${mole.analysis.Diameter.toFixed(2)}</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                `;
+                container.innerHTML += resultHtml;
+            });
+        }
+
+        function displaySingleMoleResult(data) {
+            const container = document.getElementById('results-container');
+            const resultHtml = `
+            <div class="max-w-4xl mx-auto bg-white rounded-lg shadow-md p-6">
+                <h2 class="text-2xl font-semibold mb-4 text-gray-800">Analysis Results</h2>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                    <div class="space-y-2">
+                        <h3 class="font-medium text-gray-700">Original Image</h3>
+                        <img src="${data.original_image}" class="w-full rounded-lg shadow" alt="Original mole">
+                    </div>
+                    <div class="space-y-2">
+                        <h3 class="font-medium text-gray-700">Segmentation Mask</h3>
+                        <img src="${data.mask_image}" class="w-full rounded-lg shadow" alt="Segmentation mask">
+                    </div>
+                    <div class="space-y-2">
+                        <h3 class="font-medium text-gray-700">Overlay</h3>
+                        <img src="${data.overlay_image}" class="w-full rounded-lg shadow" alt="Overlay">
+                    </div>
+                </div>
+                <div class="bg-gray-50 rounded-lg p-4">
+                    <h3 class="text-xl font-semibold mb-4 text-gray-800">ABCD Metrics</h3>
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div class="bg-white p-4 rounded-lg shadow">
+                            <h4 class="font-medium text-gray-600">Asymmetry</h4>
+                            <p class="text-2xl font-bold text-blue-600">${data.metrics.Asymmetry.toFixed(2)}</p>
+                        </div>
+                        <div class="bg-white p-4 rounded-lg shadow">
+                            <h4 class="font-medium text-gray-600">Border</h4>
+                            <p class="text-2xl font-bold text-blue-600">${data.metrics.Border.toFixed(2)}</p>
+                        </div>
+                        <div class="bg-white p-4 rounded-lg shadow">
+                            <h4 class="font-medium text-gray-600">Color</h4>
+                            <p class="text-2xl font-bold text-blue-600">${data.metrics.Colour.toFixed(2)}</p>
+                        </div>
+                        <div class="bg-white p-4 rounded-lg shadow">
+                            <h4 class="font-medium text-gray-600">Diameter</h4>
+                            <p class="text-2xl font-bold text-blue-600">${data.metrics.Diameter.toFixed(2)}</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            `;
+            container.innerHTML = resultHtml;
+        }
+    </script>
+</body>
+</html>
