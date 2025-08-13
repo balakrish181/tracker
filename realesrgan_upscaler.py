@@ -29,6 +29,7 @@ class DermaRealESRGANx2:
             num_block=23, num_grow_ch=32, scale=2
         )
 
+
         # Create upsampler
         self.upsampler = RealESRGANer(
             scale=self.netscale,
