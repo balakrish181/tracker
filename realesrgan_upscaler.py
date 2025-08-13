@@ -4,8 +4,8 @@ from basicsr.archs.rrdbnet_arch import RRDBNet
 from realesrgan import RealESRGANer
 
 # cuDNN safe settings to avoid conv plan errors
-torch.backends.cudnn.benchmark = False
-torch.backends.cudnn.deterministic = True
+# torch.backends.cudnn.benchmark = False
+# torch.backends.cudnn.deterministic = True
 
 
 class DermaRealESRGANx2:

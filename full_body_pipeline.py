@@ -6,6 +6,8 @@ from pathlib import Path
 from integrated_pipeline import IntegratedMolePipeline
 import pathlib
 import logging
+from realesrgan_upscaler import DermaRealESRGANx2
+
 
 class FullBodyMoleAnalysisPipeline:
     def __init__(self, yolo_model_path, segmentation_model_path, patch_size=1280, patch_overlap=0.2):
@@ -23,6 +25,7 @@ class FullBodyMoleAnalysisPipeline:
         
         # Initialize the integrated pipeline for segmentation and analysis
         self.integrated_pipeline = IntegratedMolePipeline(segmentation_model_path)
+        self.upscaler = DermaRealESRGANx2(model_path='weights/dermaRealESRGAN_x2plus_v1.pth', fp32=True)
         
         # Set patch parameters
         self.patch_size = patch_size
@@ -226,11 +229,11 @@ class FullBodyMoleAnalysisPipeline:
             abs_y1 = int(y1 * h)
             abs_x2 = int(x2 * w)
             abs_y2 = int(y2 * h)
-
+            target_size = 512
             # Crop the mole region
             if padding:
                 cropped_img = img[abs_y1+25:abs_y2-25, abs_x1+25:abs_x2-25]
-                target_size = 512
+                
                 pad_top = max(0, (target_size - current_h) // 2)
                 pad_bottom = max(0, target_size - current_h - pad_top)
                 pad_left = max(0, (target_size - current_w) // 2)
@@ -275,6 +278,10 @@ class FullBodyMoleAnalysisPipeline:
             cropped_filename = f"{original_filename}_{mole_id}.png"
             cropped_image_path = os.path.join(output_dir, cropped_filename)
             cv2.imwrite(cropped_image_path, padded_img)
+
+
+            #upscale the images using dermaRealESRGAN
+            self.upscaler.upscale(cropped_image_path, cropped_image_path)
             
             cropped_moles.append({
                 'mole_id': mole_id,
