@@ -8,7 +8,7 @@ import numpy as np
 import streamlit as st
 from PIL import Image
 
-from integrated_pipeline import IntegratedMolePipeline
+from mole_analysis_pipeline import MoleAnalysisPipeline
 from full_body_pipeline import FullBodyMoleAnalysisPipeline
 
 # ----------------------------
@@ -18,7 +18,7 @@ from full_body_pipeline import FullBodyMoleAnalysisPipeline
 @st.cache_resource(show_spinner=False)
 def _load_single_pipeline():
     """Load single-mole analysis pipeline once and cache it."""
-    return IntegratedMolePipeline()
+    return MoleAnalysisPipeline()
 
 
 @st.cache_resource(show_spinner=False)
@@ -87,15 +87,13 @@ if uploaded:
     if mode == "Single Mole":
         pipeline = _load_single_pipeline()
         with st.spinner("Analyzing image …"):
-            results = pipeline.process_image(str(image_path), save_intermediate=False)
-        mask = results["mask"]
-        metrics = results["metrics"]
-
-        # Display mask overlay
-        overlay = cv2.applyColorMap(mask, cv2.COLORMAP_JET)
-        original = cv2.imread(str(image_path))
-        original = cv2.resize(original, (mask.shape[1], mask.shape[0]))
-        blended = cv2.addWeighted(original, 0.7, overlay, 0.3, 0)
+            results = pipeline.process_image(str(image_path), save_outputs=True)
+            mask = results["mask"]
+            overlay = cv2.applyColorMap(mask, cv2.COLORMAP_JET)
+            original = cv2.imread(str(image_path))
+            original = cv2.resize(original, (mask.shape[1], mask.shape[0]))
+            blended = cv2.addWeighted(original, 0.7, overlay, 0.3, 0)
+            metrics = results["metrics"]
 
         with col2:
             st.image(blended[..., ::-1], caption="Segmentation Overlay", use_container_width=True)
@@ -119,13 +117,23 @@ if uploaded:
         st.subheader(f"Detected {len(results)} lesion(s)")
         for idx, res in enumerate(results, 1):
             st.markdown(f"### Lesion {idx}")
-            c1, c2, c3 = st.columns([2, 2, 4])
+            c1, c2 = st.columns([2, 4])
             with c1:
                 st.image(res.get("cropped_image_path", str(image_path)), caption="Lesion Crop", width=200)
             with c2:
-                st.image(res.get("overlay_path", str(image_path)), caption="Overlay", width=200)
-            with c3:
-                st.json(res.get("metrics", {}))
+                analysis = res.get("analysis", {})
+                if not analysis:
+                    st.write("No metrics")
+                elif "error" in analysis:
+                    st.error(analysis["error"])
+                else:
+                    for k, v in analysis.items():
+                        if isinstance(v, dict):
+                            if k != "Raw_Metrics":
+                                st.write(k)
+                                st.json(v)
+                        else:
+                            _styled_metric(k, v)
 
     # Clean up temp image when session ends
     st.session_state.setdefault("_cleanup", []).append(str(image_path))

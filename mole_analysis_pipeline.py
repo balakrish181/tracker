@@ -14,6 +14,7 @@ sys.path.append(str(Path(__file__).resolve().parent))
 from seg_mole_metrics.mobileunetr import build_mobileunetr_xxs
 from seg_mole_metrics.inference import MobileUNETRInference
 from metrics.merged_improved_metrics import MoleAnalyzer
+from realesrgan_upscaler import DermaRealESRGANx2
 
 class MoleAnalysisPipeline:
     def __init__(self, model_path="weights/segment_mob_unet_.bin"):
@@ -35,7 +36,13 @@ class MoleAnalysisPipeline:
         # Create output directory if it doesn't exist
         if save_outputs:
             Path(output_dir).mkdir(parents=True, exist_ok=True)
-            
+
+        # Upscale image if needed
+        upscaler = DermaRealESRGANx2(model_path='weights/dermaRealESRGAN_x2plus_v1.pth', fp32=True)
+        upscale_img_path = f"{output_dir}/{Path(image_path).stem}_upscaled.png"
+        upscaler.upscale(image_path, upscale_img_path)
+        image_path = upscale_img_path
+        
         # 1. Generate segmentation mask
         mask = self.segmentation_model.predict(image_path)
         
