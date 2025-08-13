@@ -3,3 +3,5 @@ torchvision
 numpy
 Pillow
 opencv-python
+streamlit
+opencv-contrib-python

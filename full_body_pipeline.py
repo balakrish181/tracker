@@ -6,6 +6,7 @@ from pathlib import Path
 from integrated_pipeline import IntegratedMolePipeline
 import pathlib
 import logging
+import platform
 from realesrgan_upscaler import DermaRealESRGANx2
 
 
@@ -20,6 +21,10 @@ class FullBodyMoleAnalysisPipeline:
             patch_size (int): Size of each patch for high-resolution image processing.
             patch_overlap (float): Overlap ratio between patches (0-1).
         """
+                # Ensure Windows compatibility for torch.hub cache paths
+        if platform.system() == "Windows":
+            pathlib.PosixPath = pathlib.WindowsPath
+
         # Load YOLOv5 model from PyTorch Hub
         self.yolo_model = torch.hub.load('ultralytics/yolov5', 'custom', path=yolo_model_path)
         
