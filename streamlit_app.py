@@ -74,26 +74,31 @@ st.title("DermAI – Intelligent Skin Lesion Analysis")
 
 with st.sidebar.expander("About", expanded=False):
     st.write("Upload a skin image and instantly receive dermatological insights using state-of-the-art segmentation and ABCD analysis models.")
-    st.markdown("Built with **PyTorch**, **Streamlit**, and ❤.")
+    #st.markdown("Built with **PyTorch**, **Streamlit**, and ❤.")
 
 uploaded = st.file_uploader("Upload an image", type=["png", "jpg", "jpeg"], accept_multiple_files=False)
 
 if uploaded:
     image_path = _save_temp_image(uploaded)
     col1, col2 = st.columns(2)
-    with col1:
-        st.image(str(image_path), caption="Original", use_container_width=True)
+    # with col1:
+    #     st.image(str(image_path), caption="Original", use_container_width=True)
 
     if mode == "Single Mole":
         pipeline = _load_single_pipeline()
         with st.spinner("Analyzing image …"):
+
             results = pipeline.process_image(str(image_path), save_outputs=True)
             mask = results["mask"]
+            image_path = results["upscaled_image"]
             overlay = cv2.applyColorMap(mask, cv2.COLORMAP_JET)
             original = cv2.imread(str(image_path))
             original = cv2.resize(original, (mask.shape[1], mask.shape[0]))
             blended = cv2.addWeighted(original, 0.7, overlay, 0.3, 0)
             metrics = results["metrics"]
+
+        with col1:
+            st.image(str(image_path), caption="Original", use_container_width=True)
 
         with col2:
             st.image(blended[..., ::-1], caption="Segmentation Overlay", use_container_width=True)

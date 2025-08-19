@@ -76,7 +76,8 @@ class MoleAnalysisPipeline:
         
         return {
             "mask": mask,
-            "metrics": metrics
+            "metrics": metrics,
+            "upscaled_image": upscale_img_path
         }
 
 def main():
