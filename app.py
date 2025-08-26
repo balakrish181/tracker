@@ -84,12 +84,25 @@ def analyze_full_body():
                 output_dir=app.config['FULL_BODY_OUTPUT_FOLDER']
             )
             
-            # Convert paths for web access
+            # Convert paths for web access and prepare response
+            response_results = []
             for result in results:
                 if 'cropped_image_path' in result:
                     result['cropped_image_path'] = f"/{app.config['FULL_BODY_OUTPUT_FOLDER']}/{Path(result['cropped_image_path']).name}"
+                    response_results.append(result)
             
-            return jsonify({'results': results, 'original_image': f'/uploads/{filename}'})
+            # Get the full image dimensions for reference
+            img = cv2.imread(filepath)
+            if img is not None:
+                height, width = img.shape[:2]
+            else:
+                width, height = 0, 0
+                
+            return jsonify({
+                'results': response_results, 
+                'original_image': f'/uploads/{filename}',
+                'image_dimensions': {'width': width, 'height': height}
+            })
             
         except Exception as e:
             return jsonify({'error': str(e)}), 500

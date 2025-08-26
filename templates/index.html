@@ -116,49 +116,168 @@
 
         function displayFullBodyResults(data) {
             const container = document.getElementById('results-container');
+            container.innerHTML = ''; // Clear previous results
+            
+            // Store the results globally for click handling
+            window.currentMoles = data.results || [];
+            
+            // Create image container with relative positioning
             const originalImageHtml = `
                 <div class="max-w-4xl mx-auto bg-white rounded-lg shadow-md p-6 mb-8">
-                    <h2 class="text-2xl font-semibold mb-4 text-gray-800">Original Full Body Image</h2>
-                    <img src="${data.original_image}" class="w-full rounded-lg shadow" alt="Full Body Image">
+                    <h2 class="text-2xl font-semibold mb-4 text-gray-800">Click on a mole to analyze it</h2>
+                    <div class="relative" id="image-container">
+                        <img src="${data.original_image}" class="w-full rounded-lg shadow" 
+                             id="full-body-image" alt="Full Body Image" 
+                             style="display: block; max-width: 100%;">
+                        <div id="bounding-boxes"></div>
+                    </div>
+                </div>
+                <div id="mole-details" class="max-w-4xl mx-auto bg-white rounded-lg shadow-md p-6 mb-8">
+                    <!-- Mole details will be shown here when a mole is clicked -->
+                    <p class="text-gray-500 text-center">Click on a mole in the image above to see details</p>
                 </div>
             `;
-            container.innerHTML += originalImageHtml;
-
-            data.results.forEach(mole => {
-                const resultHtml = `
-                <div class="max-w-4xl mx-auto bg-white rounded-lg shadow-md p-6 mb-8">
-                    <h2 class="text-2xl font-semibold mb-4 text-gray-800">Mole ID: ${mole.mole_id}</h2>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div>
-                            <h3 class="font-medium text-gray-700 mb-2">Cropped Mole</h3>
-                            <img src="${mole.cropped_image_path}" class="w-full rounded-lg shadow" alt="Cropped Mole Image">
-                        </div>
-                        <div class="bg-gray-50 rounded-lg p-4">
-                            <h3 class="text-xl font-semibold mb-4 text-gray-800">ABCD Metrics</h3>
-                            <div class="grid grid-cols-2 gap-4">
-                                <div class="bg-white p-4 rounded-lg shadow">
-                                    <h4 class="font-medium text-gray-600">Asymmetry</h4>
-                                    <p class="text-2xl font-bold text-blue-600">${mole.analysis.Asymmetry.toFixed(2)}</p>
-                                </div>
-                                <div class="bg-white p-4 rounded-lg shadow">
-                                    <h4 class="font-medium text-gray-600">Border</h4>
-                                    <p class="text-2xl font-bold text-blue-600">${mole.analysis.Border.toFixed(2)}</p>
-                                </div>
-                                <div class="bg-white p-4 rounded-lg shadow">
-                                    <h4 class="font-medium text-gray-600">Color</h4>
-                                    <p class="text-2xl font-bold text-blue-600">${mole.analysis.Colour.toFixed(2)}</p>
-                                </div>
-                                <div class="bg-white p-4 rounded-lg shadow">
-                                    <h4 class="font-medium text-gray-600">Diameter</h4>
-                                    <p class="text-2xl font-bold text-blue-600">${mole.analysis.Diameter.toFixed(2)}</p>
-                                </div>
+            container.innerHTML = originalImageHtml;
+            
+            // Draw bounding boxes on the image
+            drawBoundingBoxes(data);
+            
+            // Add click handler to the image
+            const img = document.getElementById('full-body-image');
+            img.onload = function() {
+                // Add click handler to the image
+                img.addEventListener('click', function(e) {
+                    const rect = img.getBoundingClientRect();
+                    
+                    // Calculate normalized coordinates (0-1)
+                    const x = (e.clientX - rect.left) / rect.width;
+                    const y = (e.clientY - rect.top) / rect.height;
+                    
+                    // Find the clicked mole
+                    const clickedMole = findClickedMole(x, y, data.results);
+                    if (clickedMole) {
+                        displayMoleDetails(clickedMole);
+                    }
+                });
+            };
+        }
+        
+        function drawBoundingBoxes(data) {
+            const container = document.getElementById('bounding-boxes');
+            const img = document.getElementById('full-body-image');
+            
+            if (!img || !data.results || data.results.length === 0) return;
+            
+            // Clear any existing boxes
+            container.innerHTML = '';
+            
+            // Store the image dimensions for click handling
+            window.imageDimensions = data.image_dimensions;
+            
+            // Wait for the image to load
+            img.onload = function() {
+                data.results.forEach((mole, index) => {
+                    if (mole.bbox && mole.bbox.length === 4) {
+                        const [x1, y1, x2, y2] = mole.bbox;
+                        const box = document.createElement('div');
+                        box.className = 'absolute border-2 border-red-500 cursor-pointer hover:border-blue-500 transition-colors duration-200';
+                        
+                        // Convert normalized coordinates to image dimensions
+                        const left = x1 * 100 + '%';
+                        const top = y1 * 100 + '%';
+                        const width = (x2 - x1) * 100 + '%';
+                        const height = (y2 - y1) * 100 + '%';
+                        
+                        box.style.left = left;
+                        box.style.top = top;
+                        box.style.width = width;
+                        box.style.height = height;
+                        box.dataset.index = index;
+                        
+                        // Add click handler to the box
+                        box.addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            displayMoleDetails(mole);
+                        });
+                        
+                        container.appendChild(box);
+                    }
+                });
+            };
+        }
+        
+        function findClickedMole(x, y, moles) {
+            // Find the smallest mole that contains the click point
+            let clickedMole = null;
+            let minArea = Infinity;
+            
+            // Convert x, y to normalized coordinates (0-1)
+            const clickX = x;
+            const clickY = y;
+            
+            moles.forEach(mole => {
+                if (mole.bbox && mole.bbox.length === 4) {
+                    const [x1, y1, x2, y2] = mole.bbox;
+                    
+                    // Check if click is within the bounding box
+                    if (clickX >= x1 && clickX <= x2 && 
+                        clickY >= y1 && clickY <= y2) {
+                        
+                        // Calculate area of the mole (smaller area has higher priority)
+                        const area = (x2 - x1) * (y2 - y1);
+                        if (area < minArea) {
+                            minArea = area;
+                            clickedMole = mole;
+                        }
+                    }
+                }
+            });
+            
+            return clickedMole;
+        }
+        
+        function displayMoleDetails(mole) {
+            const detailsContainer = document.getElementById('mole-details');
+            
+            if (!mole) {
+                detailsContainer.innerHTML = '<p class="text-gray-500 text-center">No mole selected. Click on a mole in the image above to see details.</p>';
+                return;
+            }
+            
+            const detailsHtml = `
+                <h2 class="text-2xl font-semibold mb-4 text-gray-800">Mole Analysis</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <h3 class="font-medium text-gray-700 mb-2">Cropped Mole</h3>
+                        ${mole.cropped_image_path ? 
+                          `<img src="${mole.cropped_image_path}" class="w-full rounded-lg shadow" alt="Cropped Mole Image">` : 
+                          '<p class="text-gray-500">No cropped image available</p>'}
+                    </div>
+                    <div class="bg-gray-50 rounded-lg p-4">
+                        <h3 class="text-xl font-semibold mb-4 text-gray-800">ABCD Metrics</h3>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div class="bg-white p-4 rounded-lg shadow">
+                                <h4 class="font-medium text-gray-600">Asymmetry</h4>
+                                <p class="text-2xl font-bold text-blue-600">${mole.analysis?.Asymmetry?.toFixed(2) || 'N/A'}</p>
+                            </div>
+                            <div class="bg-white p-4 rounded-lg shadow">
+                                <h4 class="font-medium text-gray-600">Border</h4>
+                                <p class="text-2xl font-bold text-blue-600">${mole.analysis?.Border?.toFixed(2) || 'N/A'}</p>
+                            </div>
+                            <div class="bg-white p-4 rounded-lg shadow">
+                                <h4 class="font-medium text-gray-600">Color</h4>
+                                <p class="text-2xl font-bold text-blue-600">${mole.analysis?.Colour?.toFixed(2) || 'N/A'}</p>
+                            </div>
+                            <div class="bg-white p-4 rounded-lg shadow">
+                                <h4 class="font-medium text-gray-600">Diameter</h4>
+                                <p class="text-2xl font-bold text-blue-600">${mole.analysis?.Diameter?.toFixed(2) || 'N/A'}</p>
                             </div>
                         </div>
                     </div>
                 </div>
-                `;
-                container.innerHTML += resultHtml;
-            });
+            `;
+            
+            detailsContainer.innerHTML = detailsHtml;
         }
 
         function displaySingleMoleResult(data) {
