@@ -334,7 +334,24 @@ class FullBodyMoleAnalysisPipeline:
                 mole_info['analysis'] = {'error': str(e)}
                 analysis_results.append(mole_info)
 
-        return analysis_results
+        # Build aggregated outputs for UI
+        mole_crops, metrics_list, bboxes = [], [], []
+        for m in analysis_results:
+            try:
+                crop_img = cv2.imread(m['cropped_image_path'])
+                if crop_img is not None:
+                    mole_crops.append(crop_img)
+                else:
+                    mole_crops.append(np.zeros((256,256,3),dtype=np.uint8))
+                metrics_list.append(m.get('analysis', {}))
+                bboxes.append(m.get('bbox', []))
+            except Exception:
+                continue
+        return {
+            'mole_crops': mole_crops,
+            'metrics': metrics_list,
+            'mole_bboxes': bboxes
+        }
 
 # Example usage:
 if __name__ == '__main__':
