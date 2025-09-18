@@ -39,6 +39,52 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+        
+        /* Toggle Switch Styles */
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 60px;
+            height: 34px;
+        }
+        
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 34px;
+        }
+        
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 26px;
+            width: 26px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+        
+        input:checked + .slider {
+            background-color: #2196F3;
+        }
+        
+        input:checked + .slider:before {
+            transform: translateX(26px);
+        }
     </style>
 </head>
 <body class="bg-gray-100 min-h-screen">
@@ -121,15 +167,24 @@
             // Store the results globally for click handling
             window.currentMoles = data.results || [];
             
-            // Create image container with relative positioning
+            // Create image container with relative positioning and toggle switch
             const originalImageHtml = `
                 <div class="max-w-4xl mx-auto bg-white rounded-lg shadow-md p-6 mb-8">
-                    <h2 class="text-2xl font-semibold mb-4 text-gray-800">Click on a mole to analyze it</h2>
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-2xl font-semibold text-gray-800">Click on a mole to analyze it</h2>
+                        <div class="flex items-center space-x-3">
+                            <span class="text-sm font-medium text-gray-700">Show Bounding Boxes</span>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="bbox-toggle" checked>
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                    </div>
                     <div class="relative" id="image-container">
                         <img src="${data.original_image}" class="w-full rounded-lg shadow" 
                              id="full-body-image" alt="Full Body Image" 
                              style="display: block; max-width: 100%;">
-                        <div id="bounding-boxes"></div>
+                        <div id="bounding-boxes" style="position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2;"></div>
                     </div>
                 </div>
                 <div id="mole-details" class="max-w-4xl mx-auto bg-white rounded-lg shadow-md p-6 mb-8">
@@ -142,24 +197,32 @@
             // Draw bounding boxes on the image
             drawBoundingBoxes(data);
             
-            // Add click handler to the image
+            // Add toggle functionality for bounding boxes
+            const toggleSwitch = document.getElementById('bbox-toggle');
+            toggleSwitch.addEventListener('change', function() {
+                const boundingBoxes = document.getElementById('bounding-boxes');
+                if (this.checked) {
+                    boundingBoxes.style.display = 'block';
+                } else {
+                    boundingBoxes.style.display = 'none';
+                }
+            });
+            
+            // Add click handler to the image (do not overwrite onload)
             const img = document.getElementById('full-body-image');
-            img.onload = function() {
-                // Add click handler to the image
-                img.addEventListener('click', function(e) {
-                    const rect = img.getBoundingClientRect();
-                    
-                    // Calculate normalized coordinates (0-1)
-                    const x = (e.clientX - rect.left) / rect.width;
-                    const y = (e.clientY - rect.top) / rect.height;
-                    
-                    // Find the clicked mole
-                    const clickedMole = findClickedMole(x, y, data.results);
-                    if (clickedMole) {
-                        displayMoleDetails(clickedMole);
-                    }
-                });
-            };
+            img.addEventListener('click', function(e) {
+                const rect = img.getBoundingClientRect();
+                
+                // Calculate normalized coordinates (0-1)
+                const x = (e.clientX - rect.left) / rect.width;
+                const y = (e.clientY - rect.top) / rect.height;
+                
+                // Find the clicked mole
+                const clickedMole = findClickedMole(x, y, data.results);
+                if (clickedMole) {
+                    displayMoleDetails(clickedMole);
+                }
+            });
         }
         
         function drawBoundingBoxes(data) {
@@ -174,24 +237,22 @@
             // Store the image dimensions for click handling
             window.imageDimensions = data.image_dimensions;
             
-            // Wait for the image to load
-            img.onload = function() {
+            const draw = () => {
+                // Clear again to avoid duplicates on repeated calls
+                container.innerHTML = '';
                 data.results.forEach((mole, index) => {
                     if (mole.bbox && mole.bbox.length === 4) {
                         const [x1, y1, x2, y2] = mole.bbox;
                         const box = document.createElement('div');
-                        box.className = 'absolute border-2 border-red-500 cursor-pointer hover:border-blue-500 transition-colors duration-200';
+                        box.className = 'absolute border-2 border-blue-500 cursor-pointer hover:border-blue-700 transition-colors duration-200';
+                        // Ensure boxes remain clickable even if overlay has pointer-events: none
+                        box.style.pointerEvents = 'auto';
                         
-                        // Convert normalized coordinates to image dimensions
-                        const left = x1 * 100 + '%';
-                        const top = y1 * 100 + '%';
-                        const width = (x2 - x1) * 100 + '%';
-                        const height = (y2 - y1) * 100 + '%';
-                        
-                        box.style.left = left;
-                        box.style.top = top;
-                        box.style.width = width;
-                        box.style.height = height;
+                        // Convert normalized coordinates to percentages
+                        box.style.left = (x1 * 100) + '%';
+                        box.style.top = (y1 * 100) + '%';
+                        box.style.width = ((x2 - x1) * 100) + '%';
+                        box.style.height = ((y2 - y1) * 100) + '%';
                         box.dataset.index = index;
                         
                         // Add click handler to the box
@@ -204,6 +265,12 @@
                     }
                 });
             };
+            
+            if (img.complete && img.naturalWidth > 0) {
+                draw();
+            } else {
+                img.addEventListener('load', draw, { once: true });
+            }
         }
         
         function findClickedMole(x, y, moles) {
