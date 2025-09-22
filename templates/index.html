@@ -85,6 +85,27 @@
         input:checked + .slider:before {
             transform: translateX(26px);
         }
+        
+        /* Bounding box label badge */
+        .bbox-label {
+            position: absolute;
+            top: -8px;
+            left: -2px;
+            background: #3b82f6; /* blue-500 */
+            color: #fff;
+            font-size: 12px;
+            font-weight: 600;
+            line-height: 1;
+            padding: 4px 8px;
+            border-radius: 9999px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.15);
+            pointer-events: none;
+        }
+        
+        /* Highlight ring for selected bbox */
+        .bbox-highlight {
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.6) inset;
+        }
     </style>
 </head>
 <body class="bg-gray-100 min-h-screen">
@@ -172,12 +193,21 @@
                 <div class="max-w-4xl mx-auto bg-white rounded-lg shadow-md p-6 mb-8">
                     <div class="flex justify-between items-center mb-4">
                         <h2 class="text-2xl font-semibold text-gray-800">Click on a mole to analyze it</h2>
-                        <div class="flex items-center space-x-3">
-                            <span class="text-sm font-medium text-gray-700">Show Bounding Boxes</span>
-                            <label class="toggle-switch">
-                                <input type="checkbox" id="bbox-toggle" checked>
-                                <span class="slider"></span>
-                            </label>
+                        <div class="flex items-center space-x-6">
+                            <div class="flex items-center space-x-3">
+                                <span class="text-sm font-medium text-gray-700">Show Boxes</span>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="bbox-toggle" checked>
+                                    <span class="slider"></span>
+                                </label>
+                            </div>
+                            <div class="flex items-center space-x-3">
+                                <span class="text-sm font-medium text-gray-700">Show Labels</span>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="label-toggle" checked>
+                                    <span class="slider"></span>
+                                </label>
+                            </div>
                         </div>
                     </div>
                     <div class="relative" id="image-container">
@@ -186,11 +216,13 @@
                              style="display: block; max-width: 100%;">
                         <div id="bounding-boxes" style="position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2;"></div>
                     </div>
+                    <div id="stats-bar" class="mt-6"></div>
                 </div>
                 <div id="mole-details" class="max-w-4xl mx-auto bg-white rounded-lg shadow-md p-6 mb-8">
                     <!-- Mole details will be shown here when a mole is clicked -->
                     <p class="text-gray-500 text-center">Click on a mole in the image above to see details</p>
                 </div>
+                <div id="moles-grid" class="max-w-5xl mx-auto"></div>
             `;
             container.innerHTML = originalImageHtml;
             
@@ -207,6 +239,16 @@
                     boundingBoxes.style.display = 'none';
                 }
             });
+            // Label toggle re-draws boxes to show/hide labels
+            const labelToggle = document.getElementById('label-toggle');
+            if (labelToggle) {
+                labelToggle.addEventListener('change', function() {
+                    drawBoundingBoxes(data);
+                });
+            }
+            // Render stats and grid
+            renderStatsBar(data.results || []);
+            renderMolesGrid(data.results || []);
             
             // Add click handler to the image (do not overwrite onload)
             const img = document.getElementById('full-body-image');
@@ -220,7 +262,11 @@
                 // Find the clicked mole
                 const clickedMole = findClickedMole(x, y, data.results);
                 if (clickedMole) {
+                    const idx = (window.currentMoles || []).indexOf(clickedMole);
+                    if (idx >= 0) highlightBox(idx);
                     displayMoleDetails(clickedMole);
+                    const detailsEl = document.getElementById('mole-details');
+                    if (detailsEl) detailsEl.scrollIntoView({ behavior: 'smooth' });
                 }
             });
         }
@@ -255,10 +301,21 @@
                         box.style.height = ((y2 - y1) * 100) + '%';
                         box.dataset.index = index;
                         
+                        // Add label if enabled
+                        const labelToggleEl = document.getElementById('label-toggle');
+                        if (!labelToggleEl || labelToggleEl.checked) {
+                            const lbl = document.createElement('span');
+                            lbl.className = 'bbox-label';
+                            lbl.textContent = String(index + 1);
+                            box.appendChild(lbl);
+                        }
                         // Add click handler to the box
                         box.addEventListener('click', (e) => {
                             e.stopPropagation();
+                            highlightBox(index);
                             displayMoleDetails(mole);
+                            const detailsEl = document.getElementById('mole-details');
+                            if (detailsEl) detailsEl.scrollIntoView({ behavior: 'smooth' });
                         });
                         
                         container.appendChild(box);
@@ -303,6 +360,100 @@
             return clickedMole;
         }
         
+        // --- Modern UI helpers ---
+        function highlightBox(index) {
+            const container = document.getElementById('bounding-boxes');
+            if (!container) return;
+            container.querySelectorAll('div[data-index]').forEach(el => el.classList.remove('bbox-highlight'));
+            const el = container.querySelector(`div[data-index="${index}"]`);
+            if (el) el.classList.add('bbox-highlight');
+        }
+        function computeRiskLevel(mole) {
+            const a = typeof mole?.analysis?.Asymmetry === 'number' ? mole.analysis.Asymmetry : null;
+            const b = typeof mole?.analysis?.Border === 'number' ? mole.analysis.Border : null;
+            const c = typeof mole?.analysis?.Colour === 'number' ? mole.analysis.Colour : null;
+            const d = typeof mole?.analysis?.Diameter === 'number' ? mole.analysis.Diameter : null;
+            const vals = [a, b, c, d].filter(v => typeof v === 'number' && !isNaN(v));
+            if (vals.length === 0) return { level: 'low', score: 0 };
+            const avg = vals.reduce((s, v) => s + v, 0) / vals.length;
+            const level = avg > 7 ? 'high' : avg > 4 ? 'medium' : 'low';
+            return { level, score: avg };
+        }
+        
+        function renderStatsBar(results) {
+            const el = document.getElementById('stats-bar');
+            if (!el) return;
+            const total = Array.isArray(results) ? results.length : 0;
+            let high = 0, medium = 0, low = 0;
+            (results || []).forEach(m => {
+                const { level } = computeRiskLevel(m);
+                if (level === 'high') high++; else if (level === 'medium') medium++; else low++;
+            });
+            el.innerHTML = `
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div class="bg-white rounded-lg shadow p-4">
+                        <p class="text-sm text-gray-500">Total Moles</p>
+                        <p class="text-2xl font-bold text-gray-800">${total}</p>
+                    </div>
+                    <div class="bg-white rounded-lg shadow p-4">
+                        <p class="text-sm text-gray-500">High Risk</p>
+                        <p class="text-2xl font-bold text-red-600">${high}</p>
+                    </div>
+                    <div class="bg-white rounded-lg shadow p-4">
+                        <p class="text-sm text-gray-500">Medium Risk</p>
+                        <p class="text-2xl font-bold text-yellow-600">${medium}</p>
+                    </div>
+                    <div class="bg-white rounded-lg shadow p-4">
+                        <p class="text-sm text-gray-500">Low Risk</p>
+                        <p class="text-2xl font-bold text-green-600">${low}</p>
+                    </div>
+                </div>`;
+        }
+        
+        function renderMolesGrid(results) {
+            const grid = document.getElementById('moles-grid');
+            if (!grid) return;
+            if (!Array.isArray(results) || results.length === 0) { grid.innerHTML = ''; return; }
+            let html = '<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">';
+            results.forEach((m, i) => {
+                const { level, score } = computeRiskLevel(m);
+                const riskBg = level === 'high' ? 'bg-red-100 text-red-700' : level === 'medium' ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700';
+                const avgText = typeof score === 'number' && !isNaN(score) ? score.toFixed(1) : 'N/A';
+                const imgHtml = m?.cropped_image_path ? `<img src="${m.cropped_image_path}" class="w-full h-32 object-cover rounded-md">` : `<div class="w-full h-32 bg-gray-100 rounded-md flex items-center justify-center text-gray-400">No image</div>`;
+                html += `
+                    <div class="bg-white rounded-lg shadow hover:shadow-lg transition p-3 cursor-pointer" data-index="${i}">
+                        <div class="relative"> 
+                            ${imgHtml}
+                            <span class="absolute top-2 left-2 bg-blue-500 text-white text-xs font-semibold px-2 py-1 rounded-full">#${i+1}</span>
+                            <span class="absolute top-2 right-2 ${riskBg} text-xs font-semibold px-2 py-1 rounded-full capitalize">${level}</span>
+                        </div>
+                        <div class="mt-2">
+                            <p class="text-sm text-gray-500">Avg score</p>
+                            <p class="text-lg font-semibold text-gray-800">${avgText}</p>
+                        </div>
+                    </div>`;
+            });
+            html += '</div>';
+            grid.innerHTML = html;
+            grid.querySelectorAll('[data-index]').forEach(card => {
+                card.addEventListener('click', () => {
+                    const idx = parseInt(card.getAttribute('data-index'));
+                    if (!isNaN(idx) && results[idx]) {
+                        const bboxLayer = document.getElementById('bounding-boxes');
+                        const bboxToggle = document.getElementById('bbox-toggle');
+                        if (bboxToggle && !bboxToggle.checked) {
+                            bboxToggle.checked = true;
+                            if (bboxLayer) bboxLayer.style.display = 'block';
+                        }
+                        highlightBox(idx);
+                        displayMoleDetails(results[idx]);
+                        const detailsEl = document.getElementById('mole-details');
+                        if (detailsEl) detailsEl.scrollIntoView({ behavior: 'smooth' });
+                    }
+                });
+            });
+        }
+        
         function displayMoleDetails(mole) {
             const detailsContainer = document.getElementById('mole-details');
             
@@ -311,13 +462,29 @@
                 return;
             }
             
+            const idx = (window.currentMoles || []).indexOf(mole);
+            const { level, score } = computeRiskLevel(mole);
+            const riskBg = level === 'high' ? 'bg-red-100 text-red-700' : level === 'medium' ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700';
+            const avgText = (typeof score === 'number' && !isNaN(score)) ? score.toFixed(1) : 'N/A';
+            const A = typeof mole?.analysis?.Asymmetry === 'number' ? mole.analysis.Asymmetry : null;
+            const B = typeof mole?.analysis?.Border === 'number' ? mole.analysis.Border : null;
+            const C = typeof mole?.analysis?.Colour === 'number' ? mole.analysis.Colour : null;
+            const D = typeof mole?.analysis?.Diameter === 'number' ? mole.analysis.Diameter : null;
+            const pct = (v) => (typeof v === 'number' && !isNaN(v)) ? Math.max(0, Math.min(100, (v / 10) * 100)) : 0;
+            
             const detailsHtml = `
-                <h2 class="text-2xl font-semibold mb-4 text-gray-800">Mole Analysis</h2>
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-2xl font-semibold text-gray-800">Mole Analysis ${idx >= 0 ? `(#${idx+1})` : ''}</h2>
+                    <div class="flex items-center space-x-2">
+                        <span class="${riskBg} text-sm font-semibold px-3 py-1 rounded-full capitalize">${level} risk</span>
+                        <span class="bg-blue-100 text-blue-700 text-sm font-semibold px-3 py-1 rounded-full">Avg ${avgText}</span>
+                    </div>
+                </div>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
                         <h3 class="font-medium text-gray-700 mb-2">Cropped Mole</h3>
                         ${mole.cropped_image_path ? 
-                          `<img src="${mole.cropped_image_path}" class="w-full rounded-lg shadow" alt="Cropped Mole Image">` : 
+                          `<a href="${mole.cropped_image_path}" target="_blank" rel="noopener"><img src="${mole.cropped_image_path}" class="w-full rounded-lg shadow" alt="Cropped Mole Image"></a>` : 
                           '<p class="text-gray-500">No cropped image available</p>'}
                     </div>
                     <div class="bg-gray-50 rounded-lg p-4">
@@ -325,19 +492,23 @@
                         <div class="grid grid-cols-2 gap-4">
                             <div class="bg-white p-4 rounded-lg shadow">
                                 <h4 class="font-medium text-gray-600">Asymmetry</h4>
-                                <p class="text-2xl font-bold text-blue-600">${mole.analysis?.Asymmetry?.toFixed(2) || 'N/A'}</p>
+                                <p class="text-2xl font-bold text-blue-600">${A?.toFixed ? A.toFixed(2) : 'N/A'}</p>
+                                <div class="w-full bg-gray-200 rounded h-2 mt-2"><div class="bg-blue-500 h-2 rounded" style="width: ${pct(A)}%"></div></div>
                             </div>
                             <div class="bg-white p-4 rounded-lg shadow">
                                 <h4 class="font-medium text-gray-600">Border</h4>
-                                <p class="text-2xl font-bold text-blue-600">${mole.analysis?.Border?.toFixed(2) || 'N/A'}</p>
+                                <p class="text-2xl font-bold text-blue-600">${B?.toFixed ? B.toFixed(2) : 'N/A'}</p>
+                                <div class="w-full bg-gray-200 rounded h-2 mt-2"><div class="bg-blue-500 h-2 rounded" style="width: ${pct(B)}%"></div></div>
                             </div>
                             <div class="bg-white p-4 rounded-lg shadow">
                                 <h4 class="font-medium text-gray-600">Color</h4>
-                                <p class="text-2xl font-bold text-blue-600">${mole.analysis?.Colour?.toFixed(2) || 'N/A'}</p>
+                                <p class="text-2xl font-bold text-blue-600">${C?.toFixed ? C.toFixed(2) : 'N/A'}</p>
+                                <div class="w-full bg-gray-200 rounded h-2 mt-2"><div class="bg-blue-500 h-2 rounded" style="width: ${pct(C)}%"></div></div>
                             </div>
                             <div class="bg-white p-4 rounded-lg shadow">
                                 <h4 class="font-medium text-gray-600">Diameter</h4>
-                                <p class="text-2xl font-bold text-blue-600">${mole.analysis?.Diameter?.toFixed(2) || 'N/A'}</p>
+                                <p class="text-2xl font-bold text-blue-600">${D?.toFixed ? D.toFixed(2) : 'N/A'}</p>
+                                <div class="w-full bg-gray-200 rounded h-2 mt-2"><div class="bg-blue-500 h-2 rounded" style="width: ${pct(D)}%"></div></div>
                             </div>
                         </div>
                     </div>
