@@ -106,6 +106,17 @@
         .bbox-highlight {
             box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.6) inset;
         }
+
+        /* Dark mode overrides */
+        body.dark { background-color: #0f172a; color: #e5e7eb; }
+        body.dark .bg-white { background-color: #1f2937 !important; }
+        body.dark .bg-gray-50 { background-color: #111827 !important; }
+        body.dark .text-gray-800 { color: #e5e7eb !important; }
+        body.dark .text-gray-700 { color: #d1d5db !important; }
+        body.dark .text-gray-600 { color: #cbd5e1 !important; }
+        body.dark .border-gray-300 { border-color: #374151 !important; }
+        body.dark .slider { background-color: #374151; }
+        body.dark .loading-content { background: #1f2937; color: #e5e7eb; }
     </style>
 </head>
 <body class="bg-gray-100 min-h-screen">
@@ -188,7 +199,7 @@
             // Store the results globally for click handling
             window.currentMoles = data.results || [];
             
-            // Create image container with relative positioning and toggle switch
+            // Create image container with relative positioning and toggle switches
             const originalImageHtml = `
                 <div class="max-w-4xl mx-auto bg-white rounded-lg shadow-md p-6 mb-8">
                     <div class="flex justify-between items-center mb-4">
@@ -208,13 +219,22 @@
                                     <span class="slider"></span>
                                 </label>
                             </div>
+                            <div class="flex items-center space-x-3">
+                                <span class="text-sm font-medium text-gray-700">Dark Mode</span>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="dark-toggle">
+                                    <span class="slider"></span>
+                                </label>
+                            </div>
                         </div>
                     </div>
-                    <div class="relative" id="image-container">
-                        <img src="${data.original_image}" class="w-full rounded-lg shadow" 
-                             id="full-body-image" alt="Full Body Image" 
-                             style="display: block; max-width: 100%;">
-                        <div id="bounding-boxes" style="position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2;"></div>
+                    <div class="relative overflow-hidden" id="image-container">
+                        <div id="zoom-inner" style="position: relative; transform-origin: 0 0;">
+                            <img src="${data.original_image}" class="w-full rounded-lg shadow" 
+                                 id="full-body-image" alt="Full Body Image" 
+                                 style="display: block; max-width: 100%;">
+                            <div id="bounding-boxes" style="position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2;"></div>
+                        </div>
                     </div>
                     <div id="stats-bar" class="mt-6"></div>
                 </div>
@@ -246,6 +266,22 @@
                     drawBoundingBoxes(data);
                 });
             }
+            // Dark mode toggle
+            const darkToggle = document.getElementById('dark-toggle');
+            if (darkToggle) {
+                // Initialize from persisted preference
+                const pref = localStorage.getItem('darkMode') === 'true';
+                if (pref) document.body.classList.add('dark');
+                darkToggle.checked = document.body.classList.contains('dark');
+                darkToggle.addEventListener('change', function() {
+                    document.body.classList.toggle('dark', this.checked);
+                    localStorage.setItem('darkMode', this.checked ? 'true' : 'false');
+                });
+            }
+            
+            // Initialize zoom/pan state and listeners
+            resetZoomPan();
+            initZoomPan();
             // Render stats and grid
             renderStatsBar(data.results || []);
             renderMolesGrid(data.results || []);
@@ -290,7 +326,10 @@
                     if (mole.bbox && mole.bbox.length === 4) {
                         const [x1, y1, x2, y2] = mole.bbox;
                         const box = document.createElement('div');
-                        box.className = 'absolute border-2 border-blue-500 cursor-pointer hover:border-blue-700 transition-colors duration-200';
+                        // Risk-colored border
+                        const risk = computeRiskLevel(mole)?.level || 'low';
+                        const borderClass = risk === 'high' ? 'border-red-500 hover:border-red-700' : risk === 'medium' ? 'border-yellow-500 hover:border-yellow-700' : 'border-green-500 hover:border-green-700';
+                        box.className = `absolute border-2 ${borderClass} cursor-pointer transition-colors duration-200`;
                         // Ensure boxes remain clickable even if overlay has pointer-events: none
                         box.style.pointerEvents = 'auto';
                         
@@ -307,6 +346,9 @@
                             const lbl = document.createElement('span');
                             lbl.className = 'bbox-label';
                             lbl.textContent = String(index + 1);
+                            // Color label based on risk
+                            lbl.style.background = risk === 'high' ? '#ef4444' : risk === 'medium' ? '#eab308' : '#22c55e';
+                            lbl.style.color = risk === 'medium' ? '#111827' : '#ffffff';
                             box.appendChild(lbl);
                         }
                         // Add click handler to the box
@@ -419,7 +461,7 @@
                 const { level, score } = computeRiskLevel(m);
                 const riskBg = level === 'high' ? 'bg-red-100 text-red-700' : level === 'medium' ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700';
                 const avgText = typeof score === 'number' && !isNaN(score) ? score.toFixed(1) : 'N/A';
-                const imgHtml = m?.cropped_image_path ? `<img src="${m.cropped_image_path}" class="w-full h-32 object-cover rounded-md">` : `<div class="w-full h-32 bg-gray-100 rounded-md flex items-center justify-center text-gray-400">No image</div>`;
+                const imgHtml = m?.cropped_image_path ? `<img src="${m.cropped_image_path}" class="w-full h-32 object-cover rounded-md">` : `<div class=\"w-full h-32 bg-gray-100 rounded-md flex items-center justify-center text-gray-400\">No image</div>`;
                 html += `
                     <div class="bg-white rounded-lg shadow hover:shadow-lg transition p-3 cursor-pointer" data-index="${i}">
                         <div class="relative"> 
@@ -451,6 +493,68 @@
                         if (detailsEl) detailsEl.scrollIntoView({ behavior: 'smooth' });
                     }
                 });
+            });
+        }
+
+        // --- Zoom & Pan ---
+        let zoomState = { scale: 1, tx: 0, ty: 0, panning: false, startX: 0, startY: 0, startTx: 0, startTy: 0, spaceDown: false };
+        function applyTransform() {
+            const inner = document.getElementById('zoom-inner');
+            if (!inner) return;
+            inner.style.transform = `translate(${zoomState.tx}px, ${zoomState.ty}px) scale(${zoomState.scale})`;
+        }
+        function resetZoomPan() {
+            zoomState.scale = 1; zoomState.tx = 0; zoomState.ty = 0; zoomState.panning = false;
+            applyTransform();
+        }
+        function initZoomPan() {
+            const container = document.getElementById('image-container');
+            const inner = document.getElementById('zoom-inner');
+            if (!container || !inner) return;
+            // Wheel zoom
+            container.addEventListener('wheel', (e) => {
+                e.preventDefault();
+                const rect = container.getBoundingClientRect();
+                const cx = e.clientX - rect.left;
+                const cy = e.clientY - rect.top;
+                const prevScale = zoomState.scale;
+                const delta = e.deltaY < 0 ? 1.1 : 0.9;
+                const nextScale = Math.min(6, Math.max(1, prevScale * delta));
+                const x = (cx - zoomState.tx) / prevScale;
+                const y = (cy - zoomState.ty) / prevScale;
+                zoomState.scale = nextScale;
+                zoomState.tx = cx - x * nextScale;
+                zoomState.ty = cy - y * nextScale;
+                // Snap back translation when fully zoomed out
+                if (zoomState.scale === 1) { zoomState.tx = 0; zoomState.ty = 0; }
+                applyTransform();
+            }, { passive: false });
+            // Space to pan
+            window.addEventListener('keydown', (e) => { if (e.code === 'Space') { zoomState.spaceDown = true; container.style.cursor = 'grab'; e.preventDefault(); } });
+            window.addEventListener('keyup', (e) => { if (e.code === 'Space') { zoomState.spaceDown = false; container.style.cursor = 'default'; } });
+            // Mouse pan while space held or middle button
+            container.addEventListener('mousedown', (e) => {
+                if (e.button === 1 || zoomState.spaceDown) {
+                    zoomState.panning = true;
+                    zoomState.startX = e.clientX; zoomState.startY = e.clientY;
+                    zoomState.startTx = zoomState.tx; zoomState.startTy = zoomState.ty;
+                    container.style.cursor = 'grabbing';
+                    e.preventDefault();
+                }
+            });
+            window.addEventListener('mousemove', (e) => {
+                if (!zoomState.panning) return;
+                const dx = e.clientX - zoomState.startX;
+                const dy = e.clientY - zoomState.startY;
+                zoomState.tx = zoomState.startTx + dx;
+                zoomState.ty = zoomState.startTy + dy;
+                applyTransform();
+            });
+            window.addEventListener('mouseup', () => {
+                if (zoomState.panning) {
+                    zoomState.panning = false;
+                    container.style.cursor = zoomState.spaceDown ? 'grab' : 'default';
+                }
             });
         }
         
