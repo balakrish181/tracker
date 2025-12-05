@@ -5,6 +5,8 @@ import os
 from pathlib import Path
 from integrated_pipeline import IntegratedMolePipeline
 from full_body_pipeline import FullBodyMoleAnalysisPipeline
+from compare_pipeline import CompareMolePipeline
+from compare_loftr_pipeline import LoFTRFullBodyComparator
 import cv2
 import numpy as np
 from datetime import datetime
@@ -54,6 +56,12 @@ pipeline = IntegratedMolePipeline()
 full_body_pipeline = FullBodyMoleAnalysisPipeline(
     yolo_model_path='weights/best_1280_default_hyper.pt', 
     segmentation_model_path='weights/segment_mob_unet_.bin'
+)
+compare_pipeline = CompareMolePipeline()
+loftr_comparator = LoFTRFullBodyComparator(
+    yolo_model_path='weights/best_1280_default_hyper.pt',
+    seg_model_path='weights/segment_mob_unet_.bin',
+    loftr_max_side=768
 )
 
 def allowed_file(filename):
@@ -143,6 +151,80 @@ def analyze():
             return jsonify({'error': str(e)}), 500
     
     return jsonify({'error': 'Invalid file type'}), 400
+
+@app.route('/compare', methods=['POST'])
+def compare():
+    if 'file1' not in request.files or 'file2' not in request.files:
+        return jsonify({'error': 'Two files required: file1 and file2'}), 400
+    f1 = request.files['file1']
+    f2 = request.files['file2']
+    if f1.filename == '' or f2.filename == '':
+        return jsonify({'error': 'Both files must be selected'}), 400
+    if not (allowed_file(f1.filename) and allowed_file(f2.filename)):
+        return jsonify({'error': 'Invalid file type'}), 400
+    ts = datetime.now().strftime('%Y%m%d_%H%M%S')
+    fname1 = f"{ts}_1_{f1.filename}"
+    fname2 = f"{ts}_2_{f2.filename}"
+    path1 = os.path.join(app.config['UPLOAD_FOLDER'], fname1)
+    path2 = os.path.join(app.config['UPLOAD_FOLDER'], fname2)
+    f1.save(path1)
+    f2.save(path2)
+    try:
+        result = compare_pipeline.compare(path1, path2, output_dir=app.config['OUTPUT_FOLDER'])
+        resp = {
+            'image1': f'/uploads/{fname1}',
+            'image2': f'/uploads/{fname2}',
+            'metrics1': result.get('image1_metrics'),
+            'metrics2': result.get('image2_metrics'),
+            'percent_change': result.get('percent_change')
+        }
+        return jsonify(resp)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/compare_full_body', methods=['POST'])
+def compare_full_body():
+    if 'file1' not in request.files or 'file2' not in request.files:
+        return jsonify({'error': 'Two files required: file1 and file2'}), 400
+    f1 = request.files['file1']
+    f2 = request.files['file2']
+    if f1.filename == '' or f2.filename == '':
+        return jsonify({'error': 'Both files must be selected'}), 400
+    if not (allowed_file(f1.filename) and allowed_file(f2.filename)):
+        return jsonify({'error': 'Invalid file type'}), 400
+    ts = datetime.now().strftime('%Y%m%d_%H%M%S')
+    fname1 = f"{ts}_fb1_{f1.filename}"
+    fname2 = f"{ts}_fb2_{f2.filename}"
+    path1 = os.path.join(app.config['UPLOAD_FOLDER'], fname1)
+    path2 = os.path.join(app.config['UPLOAD_FOLDER'], fname2)
+    f1.save(path1)
+    f2.save(path2)
+    try:
+        res = loftr_comparator.compare(path1, path2, output_dir=app.config['OUTPUT_FOLDER'])
+        pairs = []
+        for p in res.get('pairs', []):
+            ca = p.get('cropped_a')
+            cb = p.get('cropped_b')
+            ca_web = f"/outputs/{Path(ca).name}" if ca else None
+            cb_web = f"/outputs/{Path(cb).name}" if cb else None
+            pairs.append({
+                'a_index': p.get('a_index'),
+                'b_index': p.get('b_index'),
+                'bbox_a': p.get('bbox_a'),
+                'bbox_b': p.get('bbox_b'),
+                'cropped_a': ca_web,
+                'cropped_b': cb_web,
+                'metrics_a': p.get('metrics_a'),
+                'metrics_b': p.get('metrics_b'),
+                'percent_change': p.get('percent_change')
+            })
+        return jsonify({
+            'image1': f'/uploads/{fname1}',
+            'image2': f'/uploads/{fname2}',
+            'pairs': pairs
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/uploads/<filename>')
 def uploaded_file(filename):

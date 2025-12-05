@@ -150,13 +150,93 @@
             </div>
         </div>
 
+        <div class="max-w-2xl mx-auto bg-white rounded-lg shadow-md p-6 mb-8">
+            <div class="border-2 border-dashed border-gray-300 rounded-lg p-8">
+                <div class="mb-4">
+                    <h2 class="text-2xl font-semibold text-gray-800">Compare Two Mole Images</h2>
+                    <p class="text-gray-500 text-sm">Select two single-mole images to compare ABCD metrics.</p>
+                </div>
+                <div class="grid grid-cols-1 gap-4 mb-4">
+                    <input type="file" id="compareFile1" accept=".jpg,.jpeg,.png" class="block w-full text-sm text-gray-700" />
+                    <input type="file" id="compareFile2" accept=".jpg,.jpeg,.png" class="block w-full text-sm text-gray-700" />
+                </div>
+                <button id="compareButton" class="w-full bg-purple-600 hover:bg-purple-700 text-white font-semibold py-2 px-4 rounded-lg transition duration-200">Compare</button>
+            </div>
+        </div>
+
+        <div class="max-w-2xl mx-auto bg-white rounded-lg shadow-md p-6 mb-8">
+            <div class="border-2 border-dashed border-gray-300 rounded-lg p-8">
+                <div class="mb-4">
+                    <h2 class="text-2xl font-semibold text-gray-800">Full-Body Compare (LoFTR)</h2>
+                    <p class="text-gray-500 text-sm">Upload two full-body images to match moles and compare metrics.</p>
+                </div>
+                <div class="grid grid-cols-1 gap-4 mb-4">
+                    <input type="file" id="fbCompareFile1" accept=".jpg,.jpeg,.png" class="block w-full text-sm text-gray-700" />
+                    <input type="file" id="fbCompareFile2" accept=".jpg,.jpeg,.png" class="block w-full text-sm text-gray-700" />
+                </div>
+                <button id="fbCompareButton" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-4 rounded-lg transition duration-200">Compare Full-Body</button>
+            </div>
+        </div>
+
         <!-- Results Section -->
         <div id="results-container"></div>
+        <div id="compare-results"></div>
+        <div id="fb-compare-results"></div>
     </div>
 
     <script>
         document.getElementById('fullBodyFileInput').addEventListener('change', (e) => handleFileUpload(e, '/analyze_full_body'));
         document.getElementById('singleMoleFileInput').addEventListener('change', (e) => handleFileUpload(e, '/analyze'));
+
+        const compareBtn = document.getElementById('compareButton');
+        if (compareBtn) {
+            compareBtn.addEventListener('click', async (e) => {
+                e.preventDefault();
+                const f1 = document.getElementById('compareFile1').files[0];
+                const f2 = document.getElementById('compareFile2').files[0];
+                if (!f1 || !f2) { alert('Please select both images.'); return; }
+                document.getElementById('loading').style.display = 'block';
+                try {
+                    const fd = new FormData();
+                    fd.append('file1', f1);
+                    fd.append('file2', f2);
+                    const res = await fetch('/compare', { method: 'POST', body: fd });
+                    const data = await res.json();
+                    if (!res.ok) { alert('Error: ' + (data?.error || 'Compare failed')); return; }
+                    renderCompareResults(data);
+                } catch (err) {
+                    alert('Error comparing images: ' + err.message);
+                } finally {
+                    document.getElementById('loading').style.display = 'none';
+                }
+            });
+        }
+
+        const fbCompareBtn = document.getElementById('fbCompareButton');
+        if (fbCompareBtn) {
+            fbCompareBtn.addEventListener('click', async (e) => {
+                e.preventDefault();
+                const f1 = document.getElementById('fbCompareFile1').files[0];
+                const f2 = document.getElementById('fbCompareFile2').files[0];
+                if (!f1 || !f2) { alert('Please select both full-body images.'); return; }
+                document.getElementById('loading').style.display = 'block';
+                try {
+                    const fd = new FormData();
+                    fd.append('file1', f1);
+                    fd.append('file2', f2);
+                    const res = await fetch('/compare_full_body', { method: 'POST', body: fd });
+                    const raw = await res.text();
+                    let data;
+                    try { data = JSON.parse(raw); } catch (_) { alert('Server error: ' + raw.slice(0,500)); return; }
+                    if (!res.ok) { alert('Error: ' + (data?.error || 'Full-body compare failed')); return; }
+                    renderFullBodyCompare(data);
+                } catch (err) {
+                    alert('Error comparing full-body images: ' + err.message);
+                } finally {
+                    document.getElementById('loading').style.display = 'none';
+                }
+            });
+        }
 
         async function handleFileUpload(e, endpoint) {
             const file = e.target.files[0];
@@ -451,6 +531,59 @@
                     </div>
                 </div>`;
         }
+
+        function renderFullBodyCompare(data) {
+            const c = document.getElementById('fb-compare-results');
+            const pairs = Array.isArray(data?.pairs) ? data.pairs : [];
+            if (pairs.length === 0) { c.innerHTML = ''; return; }
+            const fmt = (v) => (typeof v === 'number' && !isNaN(v)) ? v.toFixed(2) : 'N/A';
+            const fmtPct = (v) => (typeof v === 'number' && !isNaN(v)) ? `${v.toFixed(1)}%` : 'N/A';
+            let html = `
+            <div class="max-w-5xl mx-auto bg-white rounded-lg shadow-md p-6">
+                <h2 class="text-2xl font-semibold mb-4 text-gray-800">Full-Body Matched Moles</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">`;
+            pairs.forEach((p, i) => {
+                const a = p?.metrics_a || {}; const b = p?.metrics_b || {}; const d = p?.percent_change || {};
+                html += `
+                <div class="bg-gray-50 rounded-lg p-4">
+                    <div class="flex items-center justify-between mb-3">
+                        <span class="text-sm text-gray-600">Pair #${i+1}</span>
+                    </div>
+                    <div class="grid grid-cols-2 gap-3 mb-4">
+                        <div>
+                            ${p?.cropped_a ? `<img src="${p.cropped_a}" class="w-full h-64 object-cover rounded-lg shadow" />` : ''}
+                            <p class="text-xs text-gray-500 mt-1">Image 1</p>
+                        </div>
+                        <div>
+                            ${p?.cropped_b ? `<img src="${p.cropped_b}" class="w-full h-64 object-cover rounded-lg shadow" />` : ''}
+                            <p class="text-xs text-gray-500 mt-1">Image 2</p>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-3 gap-3 text-sm">
+                        <div class="bg-white rounded p-3 shadow">
+                            <div class="flex justify-between"><span class="text-gray-600">Asym</span><span>${fmt(a.Asymmetry)}</span></div>
+                            <div class="flex justify-between"><span class="text-gray-600">Border</span><span>${fmt(a.Border)}</span></div>
+                            <div class="flex justify-between"><span class="text-gray-600">Color</span><span>${fmt(a.Colour)}</span></div>
+                            <div class="flex justify-between"><span class="text-gray-600">Diam</span><span>${fmt(a.Diameter)}</span></div>
+                        </div>
+                        <div class="bg-white rounded p-3 shadow">
+                            <div class="flex justify-between"><span class="text-gray-600">Asym</span><span>${fmt(b.Asymmetry)}</span></div>
+                            <div class="flex justify-between"><span class="text-gray-600">Border</span><span>${fmt(b.Border)}</span></div>
+                            <div class="flex justify-between"><span class="text-gray-600">Color</span><span>${fmt(b.Colour)}</span></div>
+                            <div class="flex justify-between"><span class="text-gray-600">Diam</span><span>${fmt(b.Diameter)}</span></div>
+                        </div>
+                        <div class="bg-white rounded p-3 shadow">
+                            <div class="flex justify-between"><span class="text-gray-600">Asym %</span><span>${fmtPct(d.Asymmetry)}</span></div>
+                            <div class="flex justify-between"><span class="text-gray-600">Border %</span><span>${fmtPct(d.Border)}</span></div>
+                            <div class="flex justify-between"><span class="text-gray-600">Color %</span><span>${fmtPct(d.Colour)}</span></div>
+                            <div class="flex justify-between"><span class="text-gray-600">Diam %</span><span>${fmtPct(d.Diameter)}</span></div>
+                        </div>
+                    </div>
+                </div>`;
+            });
+            html += `</div></div>`;
+            c.innerHTML = html;
+        }
         
         function renderMolesGrid(results) {
             const grid = document.getElementById('moles-grid');
@@ -620,6 +753,58 @@
             `;
             
             detailsContainer.innerHTML = detailsHtml;
+        }
+
+        function renderCompareResults(data) {
+            const c = document.getElementById('compare-results');
+            const pct = data?.percent_change || {};
+            const m1 = data?.metrics1 || {};
+            const m2 = data?.metrics2 || {};
+            const fmt = (v) => (typeof v === 'number' && !isNaN(v)) ? v.toFixed(2) : 'N/A';
+            const fmtPct = (v) => (typeof v === 'number' && !isNaN(v)) ? `${v.toFixed(1)}%` : 'N/A';
+            c.innerHTML = `
+            <div class="max-w-4xl mx-auto bg-white rounded-lg shadow-md p-6">
+                <h2 class="text-2xl font-semibold mb-4 text-gray-800">Comparison Result</h2>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                    <div>
+                        <h3 class="font-medium text-gray-700 mb-2">Image 1</h3>
+                        ${data?.image1 ? `<img src="${data.image1}" class="w-full rounded-lg shadow" />` : ''}
+                    </div>
+                    <div>
+                        <h3 class="font-medium text-gray-700 mb-2">Image 2</h3>
+                        ${data?.image2 ? `<img src="${data.image2}" class="w-full rounded-lg shadow" />` : ''}
+                    </div>
+                    <div class="bg-gray-50 rounded-lg p-4">
+                        <h3 class="text-xl font-semibold mb-3 text-gray-800">% Change</h3>
+                        <div class="space-y-2 text-sm">
+                            <div class="flex justify-between"><span class="text-gray-600">Asymmetry</span><span class="font-semibold">${fmtPct(pct.Asymmetry)}</span></div>
+                            <div class="flex justify-between"><span class="text-gray-600">Border</span><span class="font-semibold">${fmtPct(pct.Border)}</span></div>
+                            <div class="flex justify-between"><span class="text-gray-600">Color</span><span class="font-semibold">${fmtPct(pct.Colour)}</span></div>
+                            <div class="flex justify-between"><span class="text-gray-600">Diameter</span><span class="font-semibold">${fmtPct(pct.Diameter)}</span></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="bg-gray-50 rounded-lg p-4">
+                        <h3 class="text-lg font-semibold mb-3 text-gray-800">Metrics (Image 1)</h3>
+                        <div class="space-y-2 text-sm">
+                            <div class="flex justify-between"><span class="text-gray-600">Asymmetry</span><span class="font-semibold">${fmt(m1.Asymmetry)}</span></div>
+                            <div class="flex justify-between"><span class="text-gray-600">Border</span><span class="font-semibold">${fmt(m1.Border)}</span></div>
+                            <div class="flex justify-between"><span class="text-gray-600">Color</span><span class="font-semibold">${fmt(m1.Colour)}</span></div>
+                            <div class="flex justify-between"><span class="text-gray-600">Diameter</span><span class="font-semibold">${fmt(m1.Diameter)}</span></div>
+                        </div>
+                    </div>
+                    <div class="bg-gray-50 rounded-lg p-4">
+                        <h3 class="text-lg font-semibold mb-3 text-gray-800">Metrics (Image 2)</h3>
+                        <div class="space-y-2 text-sm">
+                            <div class="flex justify-between"><span class="text-gray-600">Asymmetry</span><span class="font-semibold">${fmt(m2.Asymmetry)}</span></div>
+                            <div class="flex justify-between"><span class="text-gray-600">Border</span><span class="font-semibold">${fmt(m2.Border)}</span></div>
+                            <div class="flex justify-between"><span class="text-gray-600">Color</span><span class="font-semibold">${fmt(m2.Colour)}</span></div>
+                            <div class="flex justify-between"><span class="text-gray-600">Diameter</span><span class="font-semibold">${fmt(m2.Diameter)}</span></div>
+                        </div>
+                    </div>
+                </div>
+            </div>`;
         }
 
         function displaySingleMoleResult(data) {

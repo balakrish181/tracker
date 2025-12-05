@@ -2,9 +2,11 @@ import torch
 import cv2
 import numpy as np
 from pathlib import Path
+import sys
 
 class LoFTRMatcher:
     def __init__(self, weights_path: str = None):
+        sys.path.append(str(Path(__file__).resolve().parent))
         from match_dir.src.loftr import LoFTR,default_cfg
         #from match_dir.src.config.default import get_cfg_defaults
 
@@ -31,8 +33,17 @@ class LoFTRMatcher:
         if img0 is None or img1 is None:
             raise ValueError("Could not load one or both images.")
 
-        img0 = torch.from_numpy(img0)[None][None].float() / 255.
-        img1 = torch.from_numpy(img1)[None][None].float() / 255.
+        if img0.ndim == 3 and img0.shape[-1] == 1:
+            img0 = np.squeeze(img0, axis=-1)
+        if img1.ndim == 3 and img1.shape[-1] == 1:
+            img1 = np.squeeze(img1, axis=-1)
+        if img0.ndim == 3 and img0.shape[-1] in (3, 4):
+            img0 = cv2.cvtColor(img0, cv2.COLOR_BGR2GRAY)
+        if img1.ndim == 3 and img1.shape[-1] in (3, 4):
+            img1 = cv2.cvtColor(img1, cv2.COLOR_BGR2GRAY)
+
+        img0 = torch.from_numpy(img0).unsqueeze(0).unsqueeze(0).float() / 255.
+        img1 = torch.from_numpy(img1).unsqueeze(0).unsqueeze(0).float() / 255.
 
         if torch.cuda.is_available():
             img0, img1 = img0.cuda(), img1.cuda()

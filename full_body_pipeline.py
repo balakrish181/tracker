@@ -25,8 +25,12 @@ class FullBodyMoleAnalysisPipeline:
         if platform.system() == "Windows":
             pathlib.PosixPath = pathlib.WindowsPath
 
-        # Load YOLOv5 model from PyTorch Hub
-        self.yolo_model = torch.hub.load('ultralytics/yolov5', 'custom', path=yolo_model_path)
+        # Load YOLOv5 model, prefer local repository if available to avoid network access
+        yolo_repo = os.getenv('YOLOV5_DIR')
+        if yolo_repo and os.path.exists(yolo_repo):
+            self.yolo_model = torch.hub.load(yolo_repo, 'custom', path=yolo_model_path, source='local')
+        else:
+            self.yolo_model = torch.hub.load('ultralytics/yolov5', 'custom', path=yolo_model_path)
         
         # Initialize the integrated pipeline for segmentation and analysis
         self.integrated_pipeline = IntegratedMolePipeline(segmentation_model_path)
