@@ -123,30 +123,17 @@ class LoFTRFullBodyComparator:
         ax2 = min(w, int(x2 * w))
         ay2 = min(h, int(y2 * h))
         crop = img[ay1:ay2, ax1:ax2]
-        target = 512
         ch, cw = crop.shape[:2]
         if ch == 0 or cw == 0:
             return None
-        # Match full_body_pipeline: only downscale if larger than target; otherwise keep original size
-        if ch > target or cw > target:
-            s = min(target / ch, target / cw)
-            nh, nw = int(ch * s), int(cw * s)
-            crop = cv2.resize(crop, (nw, nh), interpolation=cv2.INTER_AREA)
-            ch, cw = nh, nw
-        pad_t = (target - ch) // 2
-        pad_b = target - ch - pad_t
-        pad_l = (target - cw) // 2
-        pad_r = target - cw - pad_l
-        padded = cv2.copyMakeBorder(crop, pad_t, pad_b, pad_l, pad_r, cv2.BORDER_CONSTANT, value=[0,0,0])
         base = Path(image_path).stem
         out_name = f"{base}_{ax1}_{ay1}_{ax2}_{ay2}.png"
         out_path = os.path.join(output_dir, out_name)
-        cv2.imwrite(out_path, padded)
-        # Apply the same ESRGAN x2 upscaling as in full_body_pipeline
+        cv2.imwrite(out_path, crop)
+        # Upscale crop directly (no padding)
         try:
             self.upscaler.upscale(out_path, out_path)
         except Exception:
-            # If ESRGAN fails, keep the padded 512x512 image
             pass
         return out_path
 
