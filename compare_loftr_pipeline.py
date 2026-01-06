@@ -32,6 +32,7 @@ class LoFTRFullBodyComparator:
         img2 = cv2.imread(img2_path)
         h1, w1 = img1.shape[:2]
         h2, w2 = img2.shape[:2]
+        print(h1,w1)
         c1 = self._bbox_centers_px(dets1, w1, h1)
         c2 = self._bbox_centers_px(dets2, w2, h2)
 
@@ -53,14 +54,38 @@ class LoFTRFullBodyComparator:
         tmp1 = None
         tmp2 = None
         if s1 != 1.0:
+            # rimg1 = cv2.resize(img1, (int(w1 * s1), int(h1 * s1)), interpolation=cv2.INTER_AREA)
+            # t1 = tempfile.NamedTemporaryFile(suffix='.jpg', delete=False)
+            # t1.close()
+
+            #LOFTR expects size to be multiples of 8
             rimg1 = cv2.resize(img1, (int(w1 * s1), int(h1 * s1)), interpolation=cv2.INTER_AREA)
+            h1r, w1r = rimg1.shape[:2]
+            pad_h1 = (-h1r) % 8
+            pad_w1 = (-w1r) % 8
+            if pad_h1 or pad_w1:
+                rimg1 = cv2.copyMakeBorder(rimg1, 0, pad_h1, 0, pad_w1, cv2.BORDER_CONSTANT, value=(0,0,0))
+            print(rimg1.shape)
             t1 = tempfile.NamedTemporaryFile(suffix='.jpg', delete=False)
             t1.close()
             cv2.imwrite(t1.name, rimg1)
             use_path1 = t1.name
             tmp1 = t1.name
+
+
+
         if s2 != 1.0:
+            # rimg2 = cv2.resize(img2, (int(w2 * s2), int(h2 * s2)), interpolation=cv2.INTER_AREA)
+            # t2 = tempfile.NamedTemporaryFile(suffix='.jpg', delete=False)
+            # t2.close()
+
             rimg2 = cv2.resize(img2, (int(w2 * s2), int(h2 * s2)), interpolation=cv2.INTER_AREA)
+            h2r, w2r = rimg2.shape[:2]
+            pad_h2 = (-h2r) % 8
+            pad_w2 = (-w2r) % 8
+            if pad_h2 or pad_w2:
+                rimg2 = cv2.copyMakeBorder(rimg2, 0, pad_h2, 0, pad_w2, cv2.BORDER_CONSTANT, value=(0,0,0))
+            print(rimg2.shape)
             t2 = tempfile.NamedTemporaryFile(suffix='.jpg', delete=False)
             t2.close()
             cv2.imwrite(t2.name, rimg2)
@@ -124,8 +149,10 @@ class LoFTRFullBodyComparator:
         ay2 = min(h, int(y2 * h))
         crop = img[ay1:ay2, ax1:ax2]
         ch, cw = crop.shape[:2]
+        
         if ch == 0 or cw == 0:
             return None
+
         base = Path(image_path).stem
         out_name = f"{base}_{ax1}_{ay1}_{ax2}_{ay2}.png"
         out_path = os.path.join(output_dir, out_name)
@@ -177,3 +204,5 @@ class LoFTRFullBodyComparator:
         return {
             "pairs": results
         }
+
+

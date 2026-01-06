@@ -57,6 +57,7 @@ full_body_pipeline = FullBodyMoleAnalysisPipeline(
     yolo_model_path='weights/best_1280_default_hyper.pt', 
     segmentation_model_path='weights/segment_mob_unet_.bin'
 )
+
 compare_pipeline = CompareMolePipeline()
 loftr_comparator = LoFTRFullBodyComparator(
     yolo_model_path='weights/best_1280_default_hyper.pt',
