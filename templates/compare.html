@@ -1,0 +1,80 @@
+{% extends 'base.html' %}
+{% block content %}
+<h2 class="text-2xl font-semibold mb-4">Compare Two Single-Mole Images</h2>
+<div class="bg-white rounded-lg shadow p-6">
+  <form id="cmp-form" class="space-y-4" aria-label="Single-Image Compare">
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div>
+        <label for="cmp-file1" class="block text-sm font-medium text-gray-700">Image 1 (JPG/PNG)</label>
+        <input id="cmp-file1" name="file1" type="file" accept=".jpg,.jpeg,.png" class="mt-1 block w-full" />
+      </div>
+      <div>
+        <label for="cmp-file2" class="block text-sm font-medium text-gray-700">Image 2 (JPG/PNG)</label>
+        <input id="cmp-file2" name="file2" type="file" accept=".jpg,.jpeg,.png" class="mt-1 block w-full" />
+      </div>
+    </div>
+    <button id="cmp-run" type="submit" class="bg-purple-600 hover:bg-purple-700 text-white font-semibold px-4 py-2 rounded focus-ring">Compare</button>
+  </form>
+  <div id="cmp-result" class="mt-6"></div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+(function(){
+  const form = document.getElementById('cmp-form');
+  const out = document.getElementById('cmp-result');
+  form.addEventListener('submit', async (e)=>{
+    e.preventDefault();
+    const f1 = document.getElementById('cmp-file1').files[0];
+    const f2 = document.getElementById('cmp-file2').files[0];
+    if(!f1||!f2){ UI.toast('Please select both images','error'); return; }
+    UI.loading(true);
+    try{
+      const fd = new FormData();
+      fd.append('file1', f1); fd.append('file2', f2);
+      const res = await fetch('/compare', { method:'POST', body: fd });
+      const data = await res.json();
+      if(!res.ok){ throw new Error(data?.error || 'Server error'); }
+      const fmt = (v)=> typeof v==='number'&&!isNaN(v)? v.toFixed(2):'N/A';
+      const fmtPct = (v)=> typeof v==='number'&&!isNaN(v)? `${v.toFixed(1)}%`:'N/A';
+      const m1 = data?.metrics1||{}; const m2 = data?.metrics2||{}; const d = data?.percent_change||{};
+      out.innerHTML = `
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div><h3 class="font-medium text-gray-700 mb-2">Image 1</h3>${data?.image1?`<img src='${data.image1}' class='rounded shadow'/>`:''}</div>
+        <div><h3 class="font-medium text-gray-700 mb-2">Image 2</h3>${data?.image2?`<img src='${data.image2}' class='rounded shadow'/>`:''}</div>
+        <div class="bg-gray-50 rounded p-4">
+          <h3 class="text-lg font-semibold mb-2">% Change</h3>
+          <div class="space-y-1 text-sm">
+            <div class="flex justify-between"><span>Asymmetry</span><span>${fmtPct(d.Asymmetry)}</span></div>
+            <div class="flex justify-between"><span>Border</span><span>${fmtPct(d.Border)}</span></div>
+            <div class="flex justify-between"><span>Color</span><span>${fmtPct(d.Colour)}</span></div>
+            <div class="flex justify-between"><span>Diameter</span><span>${fmtPct(d.Diameter)}</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+        <div class="bg-white rounded p-3 shadow">
+          <h4 class="font-medium mb-2">Metrics (Image 1)</h4>
+          <div class="space-y-1 text-sm">
+            <div class="flex justify-between"><span>Asymmetry</span><span>${fmt(m1.Asymmetry)}</span></div>
+            <div class="flex justify-between"><span>Border</span><span>${fmt(m1.Border)}</span></div>
+            <div class="flex justify-between"><span>Color</span><span>${fmt(m1.Colour)}</span></div>
+            <div class="flex justify-between"><span>Diameter</span><span>${fmt(m1.Diameter)}</span></div>
+          </div>
+        </div>
+        <div class="bg-white rounded p-3 shadow">
+          <h4 class="font-medium mb-2">Metrics (Image 2)</h4>
+          <div class="space-y-1 text-sm">
+            <div class="flex justify-between"><span>Asymmetry</span><span>${fmt(m2.Asymmetry)}</span></div>
+            <div class="flex justify-between"><span>Border</span><span>${fmt(m2.Border)}</span></div>
+            <div class="flex justify-between"><span>Color</span><span>${fmt(m2.Colour)}</span></div>
+            <div class="flex justify-between"><span>Diameter</span><span>${fmt(m2.Diameter)}</span></div>
+          </div>
+        </div>
+      </div>`;
+    }catch(err){ UI.toast(err.message,'error'); }
+    finally{ UI.loading(false); }
+  });
+})();
+</script>
+{% endblock %}

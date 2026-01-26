@@ -1,0 +1,50 @@
+{% extends 'base.html' %}
+{% block content %}
+<h2 class="text-2xl font-semibold mb-4">Single Mole Analysis</h2>
+<div class="bg-white rounded-lg shadow p-6">
+  <form id="single-form" class="space-y-4" aria-label="Single Mole Upload">
+    <div>
+      <label for="single-file" class="block text-sm font-medium text-gray-700">Image file (JPG/PNG)</label>
+      <input id="single-file" name="file" type="file" accept=".jpg,.jpeg,.png" class="mt-1 block w-full" />
+    </div>
+    <button id="single-run" type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 py-2 rounded focus-ring">Analyze</button>
+  </form>
+  <div id="single-result" class="mt-6"></div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+(function(){
+  const form = document.getElementById('single-form');
+  const out = document.getElementById('single-result');
+  form.addEventListener('submit', async (e)=>{
+    e.preventDefault();
+    const file = document.getElementById('single-file').files[0];
+    if(!file){ UI.toast('Please select an image file','error'); return; }
+    UI.loading(true);
+    try{
+      const fd = new FormData(); fd.append('file', file);
+      const res = await fetch('/analyze', { method:'POST', body: fd });
+      const data = await res.json();
+      if(!res.ok){ throw new Error(data?.error || 'Server error'); }
+      out.innerHTML = `
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div><h3 class="font-medium text-gray-700 mb-2">Original</h3><img src="${data.original_image}" class="rounded shadow" alt="original"></div>
+        <div><h3 class="font-medium text-gray-700 mb-2">Mask</h3><img src="${data.mask_image}" class="rounded shadow" alt="mask"></div>
+        <div><h3 class="font-medium text-gray-700 mb-2">Overlay</h3><img src="${data.overlay_image}" class="rounded shadow" alt="overlay"></div>
+      </div>
+      <div class="mt-6 bg-gray-50 p-4 rounded">
+        <h3 class="text-lg font-semibold mb-2">ABCD Metrics</h3>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+          <div class="bg-white rounded p-3 shadow"><div class="text-gray-600">Asymmetry</div><div class="text-xl font-bold text-blue-700">${(+data.metrics.Asymmetry).toFixed(2)}</div></div>
+          <div class="bg-white rounded p-3 shadow"><div class="text-gray-600">Border</div><div class="text-xl font-bold text-blue-700">${(+data.metrics.Border).toFixed(2)}</div></div>
+          <div class="bg-white rounded p-3 shadow"><div class="text-gray-600">Color</div><div class="text-xl font-bold text-blue-700">${(+data.metrics.Colour).toFixed(2)}</div></div>
+          <div class="bg-white rounded p-3 shadow"><div class="text-gray-600">Diameter</div><div class="text-xl font-bold text-blue-700">${(+data.metrics.Diameter).toFixed(2)}</div></div>
+        </div>
+      </div>`;
+    }catch(err){ UI.toast(err.message,'error'); }
+    finally{ UI.loading(false); }
+  });
+})();
+</script>
+{% endblock %}

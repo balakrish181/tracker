@@ -1,0 +1,81 @@
+{% extends 'base.html' %}
+{% block content %}
+<h2 class="text-2xl font-semibold mb-4">Full-Body Compare (LoFTR)</h2>
+<div class="bg-white rounded-lg shadow p-6">
+  <form id="fbc-form" class="space-y-4" aria-label="Full-Body Compare">
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div>
+        <label for="fbc-file1" class="block text-sm font-medium text-gray-700">Full-body Image 1</label>
+        <input id="fbc-file1" name="file1" type="file" accept=".jpg,.jpeg,.png" class="mt-1 block w-full" />
+      </div>
+      <div>
+        <label for="fbc-file2" class="block text-sm font-medium text-gray-700">Full-body Image 2</label>
+        <input id="fbc-file2" name="file2" type="file" accept=".jpg,.jpeg,.png" class="mt-1 block w-full" />
+      </div>
+    </div>
+    <button id="fbc-run" type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-4 py-2 rounded focus-ring">Compare</button>
+  </form>
+  <div id="fbc-result" class="mt-6"></div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+(function(){
+  const form = document.getElementById('fbc-form');
+  const out = document.getElementById('fbc-result');
+  form.addEventListener('submit', async (e)=>{
+    e.preventDefault();
+    const f1 = document.getElementById('fbc-file1').files[0];
+    const f2 = document.getElementById('fbc-file2').files[0];
+    if(!f1||!f2){ UI.toast('Please select both full-body images','error'); return; }
+    UI.loading(true);
+    try{
+      const fd = new FormData(); fd.append('file1', f1); fd.append('file2', f2);
+      const res = await fetch('/compare_full_body', { method:'POST', body: fd });
+      const raw = await res.text();
+      let data; try { data = JSON.parse(raw); } catch(e){ throw new Error(raw.slice(0,300)); }
+      if(!res.ok){ throw new Error(data?.error || 'Server error'); }
+      const pairs = Array.isArray(data?.pairs)? data.pairs: [];
+      if (!pairs.length){ out.innerHTML = '<p class="text-gray-500">No matched moles found.</p>'; return; }
+      const fmt = (v)=> typeof v==='number'&&!isNaN(v)? v.toFixed(2):'N/A';
+      const fmtPct = (v)=> typeof v==='number'&&!isNaN(v)? `${v.toFixed(1)}%`:'N/A';
+      let html = '<div class="grid grid-cols-1 md:grid-cols-2 gap-6">';
+      pairs.forEach((p,i)=>{
+        const a=p?.metrics_a||{}; const b=p?.metrics_b||{}; const d=p?.percent_change||{};
+        html += `
+        <div class="bg-gray-50 rounded p-4">
+          <div class="flex items-center justify-between mb-3"><span class="text-sm text-gray-600">Pair #${i+1}</span></div>
+          <div class="grid grid-cols-2 gap-3 mb-3">
+            <div>${p?.cropped_a?`<img src='${p.cropped_a}' class='w-full h-64 object-cover rounded shadow'/>`:''}<p class='text-xs text-gray-500 mt-1'>Image 1</p></div>
+            <div>${p?.cropped_b?`<img src='${p.cropped_b}' class='w-full h-64 object-cover rounded shadow'/>`:''}<p class='text-xs text-gray-500 mt-1'>Image 2</p></div>
+          </div>
+          <div class="grid grid-cols-3 gap-3 text-sm">
+            <div class="bg-white rounded p-3 shadow">
+              <div class="flex justify-between"><span class="text-gray-600">Asym</span><span>${fmt(a.Asymmetry)}</span></div>
+              <div class="flex justify-between"><span class="text-gray-600">Border</span><span>${fmt(a.Border)}</span></div>
+              <div class="flex justify-between"><span class="text-gray-600">Color</span><span>${fmt(a.Colour)}</span></div>
+              <div class="flex justify-between"><span class="text-gray-600">Diam</span><span>${fmt(a.Diameter)}</span></div>
+            </div>
+            <div class="bg-white rounded p-3 shadow">
+              <div class="flex justify-between"><span class="text-gray-600">Asym</span><span>${fmt(b.Asymmetry)}</span></div>
+              <div class="flex justify-between"><span class="text-gray-600">Border</span><span>${fmt(b.Border)}</span></div>
+              <div class="flex justify-between"><span class="text-gray-600">Color</span><span>${fmt(b.Colour)}</span></div>
+              <div class="flex justify-between"><span class="text-gray-600">Diam</span><span>${fmt(b.Diameter)}</span></div>
+            </div>
+            <div class="bg-white rounded p-3 shadow">
+              <div class="flex justify-between"><span class="text-gray-600">Asym %</span><span>${fmtPct(d.Asymmetry)}</span></div>
+              <div class="flex justify-between"><span class="text-gray-600">Border %</span><span>${fmtPct(d.Border)}</span></div>
+              <div class="flex justify-between"><span class="text-gray-600">Color %</span><span>${fmtPct(d.Colour)}</span></div>
+              <div class="flex justify-between"><span class="text-gray-600">Diam %</span><span>${fmtPct(d.Diameter)}</span></div>
+            </div>
+          </div>
+        </div>`;
+      });
+      html += '</div>';
+      out.innerHTML = html;
+    }catch(err){ UI.toast(err.message,'error'); }
+    finally{ UI.loading(false); }
+  });
+})();
+</script>
+{% endblock %}

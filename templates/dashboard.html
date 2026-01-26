@@ -1,0 +1,25 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+  <a href="{{ url_for('single_view') }}" class="bg-white rounded-xl shadow p-6 focus-ring block">
+    <div class="text-gray-500 text-sm">Analyze</div>
+    <div class="text-2xl font-semibold mt-1">Single Mole</div>
+    <p class="text-gray-500 mt-2">Upload a single mole image and get ABCD metrics.</p>
+  </a>
+  <a href="{{ url_for('full_body_view') }}" class="bg-white rounded-xl shadow p-6 focus-ring block">
+    <div class="text-gray-500 text-sm">Screening</div>
+    <div class="text-2xl font-semibold mt-1">Full Body</div>
+    <p class="text-gray-500 mt-2">Detect and review all moles with interactive viewer.</p>
+  </a>
+  <a href="{{ url_for('compare_view') }}" class="bg-white rounded-xl shadow p-6 focus-ring block">
+    <div class="text-gray-500 text-sm">Compare</div>
+    <div class="text-2xl font-semibold mt-1">Single to Single</div>
+    <p class="text-gray-500 mt-2">Side-by-side ABCD comparison with percent change.</p>
+  </a>
+  <a href="{{ url_for('compare_full_body_view') }}" class="bg-white rounded-xl shadow p-6 focus-ring block">
+    <div class="text-gray-500 text-sm">Longitudinal</div>
+    <div class="text-2xl font-semibold mt-1">Full-Body Match</div>
+    <p class="text-gray-500 mt-2">Match moles across two full-body images.</p>
+  </a>
+</div>
+{% endblock %}

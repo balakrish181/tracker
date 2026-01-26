@@ -1,0 +1,105 @@
+{% extends 'base.html' %}
+{% block content %}
+<h2 class="text-2xl font-semibold mb-4">Full-Body Screening</h2>
+<div class="bg-white rounded-lg shadow p-6">
+  <form id="fb-form" class="space-y-4" aria-label="Full Body Upload">
+    <div>
+      <label for="fb-file" class="block text-sm font-medium text-gray-700">Image file (JPG/PNG)</label>
+      <input id="fb-file" name="file" type="file" accept=".jpg,.jpeg,.png" class="mt-1 block w-full" />
+    </div>
+    <button id="fb-run" type="submit" class="bg-green-600 hover:bg-green-700 text-white font-semibold px-4 py-2 rounded focus-ring">Analyze</button>
+  </form>
+  <div id="fb-view" class="mt-6 hidden">
+    <div class="mb-3 flex items-center space-x-4">
+      <label class="flex items-center space-x-2"><input id="toggle-boxes" type="checkbox" checked /><span>Show boxes</span></label>
+      <label class="flex items-center space-x-2"><input id="toggle-labels" type="checkbox" checked /><span>Show labels</span></label>
+    </div>
+    <div class="relative" id="img-wrap">
+      <img id="fb-img" src="" alt="full body" class="rounded shadow w-full" />
+      <div id="fb-boxes" class="absolute inset-0" style="pointer-events:none"></div>
+    </div>
+    <div id="fb-details" class="mt-6"></div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+(function(){
+  const form = document.getElementById('fb-form');
+  const view = document.getElementById('fb-view');
+  const img = document.getElementById('fb-img');
+  const boxes = document.getElementById('fb-boxes');
+  const details = document.getElementById('fb-details');
+  const tBoxes = document.getElementById('toggle-boxes');
+  const tLabels = document.getElementById('toggle-labels');
+  let current = [];
+
+  form.addEventListener('submit', async (e)=>{
+    e.preventDefault();
+    const file = document.getElementById('fb-file').files[0];
+    if(!file){ UI.toast('Please select an image file','error'); return; }
+    UI.loading(true);
+    try{
+      const fd = new FormData(); fd.append('file', file);
+      const res = await fetch('/analyze_full_body', { method:'POST', body: fd });
+      const data = await res.json();
+      if(!res.ok){ throw new Error(data?.error || 'Server error'); }
+      img.src = data.original_image;
+      current = Array.isArray(data.results) ? data.results : [];
+      view.classList.remove('hidden');
+      drawBoxes();
+    }catch(err){ UI.toast(err.message,'error'); }
+    finally{ UI.loading(false); }
+  });
+
+  function drawBoxes(){
+    boxes.innerHTML = '';
+    boxes.style.display = tBoxes.checked ? 'block' : 'none';
+    const add = (m, i)=>{
+      if(!Array.isArray(m.bbox) || m.bbox.length!==4) return;
+      const [x1,y1,x2,y2] = m.bbox;
+      const el = document.createElement('div');
+      el.style.position='absolute';
+      el.style.left = (x1*100)+'%';
+      el.style.top = (y1*100)+'%';
+      el.style.width = ((x2-x1)*100)+'%';
+      el.style.height = ((y2-y1)*100)+'%';
+      el.style.border = '2px solid #3b82f6';
+      el.style.pointerEvents = 'auto';
+      if (tLabels.checked){
+        const lbl = document.createElement('span');
+        lbl.textContent = String(i+1);
+        lbl.style.position='absolute';
+        lbl.style.left='-6px'; lbl.style.top='-10px';
+        lbl.style.background='#3b82f6'; lbl.style.color='#fff'; lbl.style.fontSize='12px';
+        lbl.style.padding='2px 6px'; lbl.style.borderRadius='12px';
+        el.appendChild(lbl);
+      }
+      el.addEventListener('click', (ev)=>{ ev.stopPropagation(); showDetails(m, i); });
+      boxes.appendChild(el);
+    };
+    current.forEach(add);
+  }
+  tBoxes.addEventListener('change', drawBoxes);
+  tLabels.addEventListener('change', drawBoxes);
+
+  function showDetails(m, idx){
+    const A = m?.analysis?.Asymmetry, B=m?.analysis?.Border, C=m?.analysis?.Colour, D=m?.analysis?.Diameter;
+    const fmt = (v)=> typeof v==='number'&&!isNaN(v)? v.toFixed(2):'N/A';
+    details.innerHTML = `
+      <div class="bg-gray-50 rounded p-4">
+        <div class="flex items-center justify-between mb-3">
+          <h3 class="text-lg font-semibold">Mole #${idx+1}</h3>
+          ${m?.cropped_image_path? `<a class='text-blue-600 underline' href='${m.cropped_image_path}' target='_blank' rel='noopener'>Open crop</a>`:''}
+        </div>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+          <div class="bg-white rounded p-3 shadow"><div class="text-gray-600">Asymmetry</div><div class="text-xl font-bold text-blue-700">${fmt(A)}</div></div>
+          <div class="bg-white rounded p-3 shadow"><div class="text-gray-600">Border</div><div class="text-xl font-bold text-blue-700">${fmt(B)}</div></div>
+          <div class="bg-white rounded p-3 shadow"><div class="text-gray-600">Color</div><div class="text-xl font-bold text-blue-700">${fmt(C)}</div></div>
+          <div class="bg-white rounded p-3 shadow"><div class="text-gray-600">Diameter</div><div class="text-xl font-bold text-blue-700">${fmt(D)}</div></div>
+        </div>
+      </div>`
+  }
+})();
+</script>
+{% endblock %}

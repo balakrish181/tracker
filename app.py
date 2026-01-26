@@ -70,7 +70,23 @@ def allowed_file(filename):
 
 @app.route('/')
 def home():
-    return render_template('index.html')
+    return render_template('dashboard.html')
+
+@app.route('/single', methods=['GET'])
+def single_view():
+    return render_template('single.html')
+
+@app.route('/full_body', methods=['GET'])
+def full_body_view():
+    return render_template('full_body.html')
+
+@app.route('/compare_view', methods=['GET'])
+def compare_view():
+    return render_template('compare.html')
+
+@app.route('/compare_full_body_view', methods=['GET'])
+def compare_full_body_view():
+    return render_template('compare_full_body.html')
 
 @app.route('/analyze_full_body', methods=['POST'])
 def analyze_full_body():
