@@ -1,49 +1,155 @@
 {% extends 'base.html' %}
 {% block content %}
-<h2 class="text-2xl font-semibold mb-4">Single Mole Analysis</h2>
-<div class="bg-white rounded-lg shadow p-6">
-  <form id="single-form" class="space-y-4" aria-label="Single Mole Upload">
-    <div>
-      <label for="single-file" class="block text-sm font-medium text-gray-700">Image file (JPG/PNG)</label>
-      <input id="single-file" name="file" type="file" accept=".jpg,.jpeg,.png" class="mt-1 block w-full" />
-    </div>
-    <button id="single-run" type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 py-2 rounded focus-ring">Analyze</button>
-  </form>
-  <div id="single-result" class="mt-6"></div>
+<div class="max-w-7xl mx-auto px-6 py-10">
+
+  <!-- Header -->
+  <div class="mb-8">
+    <h1 class="text-3xl font-semibold text-gray-800">Single Mole Analysis</h1>
+    <p class="text-gray-600 mt-2">
+      Dermoscopic lesion segmentation and ABCD metric computation.
+    </p>
+  </div>
+
+  <!-- Upload Panel -->
+  <div class="bg-white rounded-2xl shadow-md p-8 border border-gray-100">
+    <form id="single-form" class="space-y-6" aria-label="Single Mole Upload">
+
+      <div>
+        <label for="single-file" class="block text-sm font-medium text-gray-700">
+          Image file (JPG/PNG)
+        </label>
+        <input id="single-file"
+               name="file"
+               type="file"
+               accept=".jpg,.jpeg,.png"
+               class="mt-2 block w-full text-sm text-gray-600
+                      file:mr-4 file:py-2 file:px-4
+                      file:rounded-md file:border-0
+                      file:text-sm file:font-semibold
+                      file:bg-blue-50 file:text-blue-700
+                      hover:file:bg-blue-100" />
+      </div>
+
+      <div class="flex items-center justify-between">
+        <div class="text-xs text-gray-400">
+          Output: Segmentation mask • Overlay • Quantitative ABCD metrics
+        </div>
+        <button id="single-run"
+                type="submit"
+                class="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-5 py-2.5 rounded-lg focus-ring transition">
+          Run Analysis
+        </button>
+      </div>
+
+    </form>
+  </div>
+
+  <!-- Results -->
+  <div id="single-result" class="mt-10"></div>
+
 </div>
 {% endblock %}
+
 {% block scripts %}
 <script>
 (function(){
   const form = document.getElementById('single-form');
   const out = document.getElementById('single-result');
+
   form.addEventListener('submit', async (e)=>{
     e.preventDefault();
+
     const file = document.getElementById('single-file').files[0];
-    if(!file){ UI.toast('Please select an image file','error'); return; }
+    if(!file){
+      UI.toast('Please select an image file','error');
+      return;
+    }
+
     UI.loading(true);
+
     try{
-      const fd = new FormData(); fd.append('file', file);
+      const fd = new FormData();
+      fd.append('file', file);
+
       const res = await fetch('/analyze', { method:'POST', body: fd });
       const data = await res.json();
-      if(!res.ok){ throw new Error(data?.error || 'Server error'); }
+
+      if(!res.ok){
+        throw new Error(data?.error || 'Server error');
+      }
+
       out.innerHTML = `
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div><h3 class="font-medium text-gray-700 mb-2">Original</h3><img src="${data.original_image}" class="rounded shadow" alt="original"></div>
-        <div><h3 class="font-medium text-gray-700 mb-2">Mask</h3><img src="${data.mask_image}" class="rounded shadow" alt="mask"></div>
-        <div><h3 class="font-medium text-gray-700 mb-2">Overlay</h3><img src="${data.overlay_image}" class="rounded shadow" alt="overlay"></div>
-      </div>
-      <div class="mt-6 bg-gray-50 p-4 rounded">
-        <h3 class="text-lg font-semibold mb-2">ABCD Metrics</h3>
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-          <div class="bg-white rounded p-3 shadow"><div class="text-gray-600">Asymmetry</div><div class="text-xl font-bold text-blue-700">${(+data.metrics.Asymmetry).toFixed(2)}</div></div>
-          <div class="bg-white rounded p-3 shadow"><div class="text-gray-600">Border</div><div class="text-xl font-bold text-blue-700">${(+data.metrics.Border).toFixed(2)}</div></div>
-          <div class="bg-white rounded p-3 shadow"><div class="text-gray-600">Color</div><div class="text-xl font-bold text-blue-700">${(+data.metrics.Colour).toFixed(2)}</div></div>
-          <div class="bg-white rounded p-3 shadow"><div class="text-gray-600">Diameter</div><div class="text-xl font-bold text-blue-700">${(+data.metrics.Diameter).toFixed(2)}</div></div>
+        <div class="space-y-10">
+
+          <!-- Image Outputs -->
+          <div>
+            <h2 class="text-lg font-semibold text-gray-800 mb-4">
+              Segmentation Outputs
+            </h2>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div>
+                <div class="text-sm text-gray-500 mb-2">Original</div>
+                <img src="${data.original_image}" class="rounded-xl shadow-md" alt="original">
+              </div>
+              <div>
+                <div class="text-sm text-gray-500 mb-2">Mask</div>
+                <img src="${data.mask_image}" class="rounded-xl shadow-md" alt="mask">
+              </div>
+              <div>
+                <div class="text-sm text-gray-500 mb-2">Overlay</div>
+                <img src="${data.overlay_image}" class="rounded-xl shadow-md" alt="overlay">
+              </div>
+            </div>
+          </div>
+
+          <!-- Metrics Panel -->
+          <div class="bg-gray-50 border border-gray-100 rounded-2xl p-6">
+            <h2 class="text-lg font-semibold text-gray-800 mb-6">
+              ABCD Metrics
+            </h2>
+
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-6 text-sm">
+
+              <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+                <div class="text-gray-500">Asymmetry</div>
+                <div class="text-2xl font-bold text-blue-700 mt-1">
+                  ${( +data.metrics.Asymmetry ).toFixed(2)}
+                </div>
+              </div>
+
+              <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+                <div class="text-gray-500">Border</div>
+                <div class="text-2xl font-bold text-blue-700 mt-1">
+                  ${( +data.metrics.Border ).toFixed(2)}
+                </div>
+              </div>
+
+              <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+                <div class="text-gray-500">Color</div>
+                <div class="text-2xl font-bold text-blue-700 mt-1">
+                  ${( +data.metrics.Colour ).toFixed(2)}
+                </div>
+              </div>
+
+              <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+                <div class="text-gray-500">Diameter</div>
+                <div class="text-2xl font-bold text-blue-700 mt-1">
+                  ${( +data.metrics.Diameter ).toFixed(2)}
+                </div>
+              </div>
+
+            </div>
+          </div>
+
         </div>
-      </div>`;
-    }catch(err){ UI.toast(err.message,'error'); }
-    finally{ UI.loading(false); }
+      `;
+
+    } catch(err){
+      UI.toast(err.message,'error');
+    } finally{
+      UI.loading(false);
+    }
   });
 })();
 </script>

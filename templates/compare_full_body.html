@@ -1,80 +1,231 @@
 {% extends 'base.html' %}
 {% block content %}
-<h2 class="text-2xl font-semibold mb-4">Full-Body Compare (LoFTR)</h2>
-<div class="bg-white rounded-lg shadow p-6">
-  <form id="fbc-form" class="space-y-4" aria-label="Full-Body Compare">
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-      <div>
-        <label for="fbc-file1" class="block text-sm font-medium text-gray-700">Full-body Image 1</label>
-        <input id="fbc-file1" name="file1" type="file" accept=".jpg,.jpeg,.png" class="mt-1 block w-full" />
+<div class="max-w-7xl mx-auto px-6 py-10">
+
+  <!-- Page Header -->
+  <div class="mb-8">
+    <h1 class="text-3xl font-semibold text-gray-800">
+      Full-Body Longitudinal Comparison
+    </h1>
+    <p class="text-gray-600 mt-2">
+      LoFTR-based lesion correspondence with quantitative change analysis.
+    </p>
+  </div>
+
+  <!-- Upload Card -->
+  <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-8">
+    <form id="fbc-form" class="space-y-6" aria-label="Full-Body Compare">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div>
+          <label for="fbc-file1" class="block text-sm font-medium text-gray-700">
+            Full-Body Image 1
+          </label>
+          <input id="fbc-file1"
+                 name="file1"
+                 type="file"
+                 accept=".jpg,.jpeg,.png"
+                 class="mt-2 block w-full text-sm text-gray-600
+                        file:mr-4 file:py-2 file:px-4
+                        file:rounded-md file:border-0
+                        file:text-sm file:font-semibold
+                        file:bg-emerald-50 file:text-emerald-700
+                        hover:file:bg-emerald-100" />
+        </div>
+
+        <div>
+          <label for="fbc-file2" class="block text-sm font-medium text-gray-700">
+            Full-Body Image 2
+          </label>
+          <input id="fbc-file2"
+                 name="file2"
+                 type="file"
+                 accept=".jpg,.jpeg,.png"
+                 class="mt-2 block w-full text-sm text-gray-600
+                        file:mr-4 file:py-2 file:px-4
+                        file:rounded-md file:border-0
+                        file:text-sm file:font-semibold
+                        file:bg-emerald-50 file:text-emerald-700
+                        hover:file:bg-emerald-100" />
+        </div>
       </div>
-      <div>
-        <label for="fbc-file2" class="block text-sm font-medium text-gray-700">Full-body Image 2</label>
-        <input id="fbc-file2" name="file2" type="file" accept=".jpg,.jpeg,.png" class="mt-1 block w-full" />
-      </div>
-    </div>
-    <button id="fbc-run" type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-4 py-2 rounded focus-ring">Compare</button>
-  </form>
-  <div id="fbc-result" class="mt-6"></div>
+
+      <button id="cmp-run"
+        type="submit"
+        class="inline-flex items-center justify-center
+               bg-indigo-600 hover:bg-indigo-700
+               text-white font-semibold
+               px-5 py-2.5
+               rounded-lg
+               focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2
+               transition duration-200">
+  Run Comparison
+</button>
+    </form>
+  </div>
+
+  <!-- Results -->
+  <div id="fbc-result"></div>
+
 </div>
 {% endblock %}
+
 {% block scripts %}
 <script>
 (function(){
   const form = document.getElementById('fbc-form');
   const out = document.getElementById('fbc-result');
+
   form.addEventListener('submit', async (e)=>{
     e.preventDefault();
+
     const f1 = document.getElementById('fbc-file1').files[0];
     const f2 = document.getElementById('fbc-file2').files[0];
-    if(!f1||!f2){ UI.toast('Please select both full-body images','error'); return; }
+
+    if(!f1 || !f2){
+      UI.toast('Please select both full-body images','error');
+      return;
+    }
+
     UI.loading(true);
+
     try{
-      const fd = new FormData(); fd.append('file1', f1); fd.append('file2', f2);
+      const fd = new FormData();
+      fd.append('file1', f1);
+      fd.append('file2', f2);
+
       const res = await fetch('/compare_full_body', { method:'POST', body: fd });
       const raw = await res.text();
-      let data; try { data = JSON.parse(raw); } catch(e){ throw new Error(raw.slice(0,300)); }
-      if(!res.ok){ throw new Error(data?.error || 'Server error'); }
-      const pairs = Array.isArray(data?.pairs)? data.pairs: [];
-      if (!pairs.length){ out.innerHTML = '<p class="text-gray-500">No matched moles found.</p>'; return; }
+
+      let data;
+      try { data = JSON.parse(raw); }
+      catch(e){ throw new Error(raw.slice(0,300)); }
+
+      if(!res.ok){
+        throw new Error(data?.error || 'Server error');
+      }
+
+      const pairs = Array.isArray(data?.pairs) ? data.pairs : [];
+      if(!pairs.length){
+        out.innerHTML = `
+          <div class="bg-gray-50 rounded-xl p-6 text-gray-500">
+            No matched lesions found.
+          </div>`;
+        return;
+      }
+
       const fmt = (v)=> typeof v==='number'&&!isNaN(v)? v.toFixed(2):'N/A';
-      const fmtPct = (v)=> typeof v==='number'&&!isNaN(v)? `${v.toFixed(1)}%`:'N/A';
-      let html = '<div class="grid grid-cols-1 md:grid-cols-2 gap-6">';
+
+      function pctBlock(label,value){
+        if(typeof value!=='number' || isNaN(value)){
+          return `<div class="flex justify-between"><span>${label}</span><span>N/A</span></div>`;
+        }
+
+        const arrow = value>0?'↑':value<0?'↓':'–';
+        const color =
+          value>10 ? 'text-red-600' :
+          value<-10 ? 'text-green-600' :
+          'text-gray-700';
+
+        return `
+          <div class="flex justify-between">
+            <span>${label}</span>
+            <span class="font-semibold ${color}">
+              ${value.toFixed(1)}% ${arrow}
+            </span>
+          </div>`;
+      }
+
+      function metricRow(label,value){
+        const num = typeof value==='number'?value:null;
+        const pct = num!==null ? Math.min(100,Math.max(0,(num/10)*100)) : 0;
+
+        return `
+          <div>
+            <div class="flex justify-between text-sm">
+              <span class="text-gray-600">${label}</span>
+              <span class="font-medium text-emerald-700">
+                ${num!==null?num.toFixed(2):'N/A'}
+              </span>
+            </div>
+            <div class="w-full bg-gray-200 rounded h-2 mt-1">
+              <div class="bg-emerald-600 h-2 rounded"
+                   style="width:${pct}%"></div>
+            </div>
+          </div>`;
+      }
+
+      let html = '<div class="grid grid-cols-1 md:grid-cols-2 gap-8">';
+
       pairs.forEach((p,i)=>{
-        const a=p?.metrics_a||{}; const b=p?.metrics_b||{}; const d=p?.percent_change||{};
+        const a = p?.metrics_a || {};
+        const b = p?.metrics_b || {};
+        const d = p?.percent_change || {};
+
         html += `
-        <div class="bg-gray-50 rounded p-4">
-          <div class="flex items-center justify-between mb-3"><span class="text-sm text-gray-600">Pair #${i+1}</span></div>
-          <div class="grid grid-cols-2 gap-3 mb-3">
-            <div>${p?.cropped_a?`<img src='${p.cropped_a}' class='w-full h-64 object-cover rounded shadow'/>`:''}<p class='text-xs text-gray-500 mt-1'>Image 1</p></div>
-            <div>${p?.cropped_b?`<img src='${p.cropped_b}' class='w-full h-64 object-cover rounded shadow'/>`:''}<p class='text-xs text-gray-500 mt-1'>Image 2</p></div>
-          </div>
-          <div class="grid grid-cols-3 gap-3 text-sm">
-            <div class="bg-white rounded p-3 shadow">
-              <div class="flex justify-between"><span class="text-gray-600">Asym</span><span>${fmt(a.Asymmetry)}</span></div>
-              <div class="flex justify-between"><span class="text-gray-600">Border</span><span>${fmt(a.Border)}</span></div>
-              <div class="flex justify-between"><span class="text-gray-600">Color</span><span>${fmt(a.Colour)}</span></div>
-              <div class="flex justify-between"><span class="text-gray-600">Diam</span><span>${fmt(a.Diameter)}</span></div>
+          <div class="bg-white rounded-xl p-6 border border-gray-100 shadow-sm">
+
+            <div class="flex items-center justify-between mb-6">
+              <h3 class="text-lg font-semibold text-gray-800">
+                Lesion Pair #${i+1}
+              </h3>
             </div>
-            <div class="bg-white rounded p-3 shadow">
-              <div class="flex justify-between"><span class="text-gray-600">Asym</span><span>${fmt(b.Asymmetry)}</span></div>
-              <div class="flex justify-between"><span class="text-gray-600">Border</span><span>${fmt(b.Border)}</span></div>
-              <div class="flex justify-between"><span class="text-gray-600">Color</span><span>${fmt(b.Colour)}</span></div>
-              <div class="flex justify-between"><span class="text-gray-600">Diam</span><span>${fmt(b.Diameter)}</span></div>
+
+            <div class="grid grid-cols-2 gap-4 mb-6">
+              <div>
+                ${p?.cropped_a ? `<img src="${p.cropped_a}" class="w-full h-56 object-cover rounded-lg shadow-sm"/>` : ''}
+                <p class="text-xs text-gray-500 mt-2">Image 1</p>
+              </div>
+              <div>
+                ${p?.cropped_b ? `<img src="${p.cropped_b}" class="w-full h-56 object-cover rounded-lg shadow-sm"/>` : ''}
+                <p class="text-xs text-gray-500 mt-2">Image 2</p>
+              </div>
             </div>
-            <div class="bg-white rounded p-3 shadow">
-              <div class="flex justify-between"><span class="text-gray-600">Asym %</span><span>${fmtPct(d.Asymmetry)}</span></div>
-              <div class="flex justify-between"><span class="text-gray-600">Border %</span><span>${fmtPct(d.Border)}</span></div>
-              <div class="flex justify-between"><span class="text-gray-600">Color %</span><span>${fmtPct(d.Colour)}</span></div>
-              <div class="flex justify-between"><span class="text-gray-600">Diam %</span><span>${fmtPct(d.Diameter)}</span></div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+
+              <div class="space-y-3">
+                <h4 class="font-medium text-gray-700">Metrics — Image 1</h4>
+                ${metricRow('Asymmetry',a.Asymmetry)}
+                ${metricRow('Border',a.Border)}
+                ${metricRow('Color',a.Colour)}
+                ${metricRow('Diameter',a.Diameter)}
+              </div>
+
+              <div class="space-y-3">
+                <h4 class="font-medium text-gray-700">Metrics — Image 2</h4>
+                ${metricRow('Asymmetry',b.Asymmetry)}
+                ${metricRow('Border',b.Border)}
+                ${metricRow('Color',b.Colour)}
+                ${metricRow('Diameter',b.Diameter)}
+              </div>
+
+              <div class="bg-gray-50 rounded-lg p-4 border border-gray-100">
+                <h4 class="font-medium text-gray-800 mb-3">
+                  Percent Change
+                </h4>
+                <div class="space-y-2 text-sm">
+                  ${pctBlock('Asymmetry',d.Asymmetry)}
+                  ${pctBlock('Border',d.Border)}
+                  ${pctBlock('Color',d.Colour)}
+                  ${pctBlock('Diameter',d.Diameter)}
+                </div>
+              </div>
+
             </div>
-          </div>
-        </div>`;
+
+          </div>`;
       });
+
       html += '</div>';
       out.innerHTML = html;
-    }catch(err){ UI.toast(err.message,'error'); }
-    finally{ UI.loading(false); }
+
+    } catch(err){
+      UI.toast(err.message,'error');
+    }
+    finally{
+      UI.loading(false);
+    }
+
   });
 })();
 </script>

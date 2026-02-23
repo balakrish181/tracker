@@ -1,79 +1,206 @@
 {% extends 'base.html' %}
 {% block content %}
-<h2 class="text-2xl font-semibold mb-4">Compare Two Single-Mole Images</h2>
-<div class="bg-white rounded-lg shadow p-6">
-  <form id="cmp-form" class="space-y-4" aria-label="Single-Image Compare">
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-      <div>
-        <label for="cmp-file1" class="block text-sm font-medium text-gray-700">Image 1 (JPG/PNG)</label>
-        <input id="cmp-file1" name="file1" type="file" accept=".jpg,.jpeg,.png" class="mt-1 block w-full" />
+<div class="max-w-7xl mx-auto px-6 py-10">
+
+  <!-- Page Header -->
+  <div class="mb-8">
+    <h1 class="text-3xl font-semibold text-gray-800">
+      Single-Mole Comparison
+    </h1>
+    <p class="text-gray-600 mt-2">
+      Side-by-side ABCD metric comparison with quantitative change analysis.
+    </p>
+  </div>
+
+  <!-- Upload Card -->
+  <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-8">
+    <form id="cmp-form" class="space-y-6" aria-label="Single-Image Compare">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div>
+          <label for="cmp-file1" class="block text-sm font-medium text-gray-700">
+            Image 1 (JPG/PNG)
+          </label>
+          <input id="cmp-file1"
+                 name="file1"
+                 type="file"
+                 accept=".jpg,.jpeg,.png"
+                 class="mt-2 block w-full text-sm text-gray-600
+                        file:mr-4 file:py-2 file:px-4
+                        file:rounded-md file:border-0
+                        file:text-sm file:font-semibold
+                        file:bg-amber-50 file:text-amber-700
+                        hover:file:bg-amber-100" />
+        </div>
+
+        <div>
+          <label for="cmp-file2" class="block text-sm font-medium text-gray-700">
+            Image 2 (JPG/PNG)
+          </label>
+          <input id="cmp-file2"
+                 name="file2"
+                 type="file"
+                 accept=".jpg,.jpeg,.png"
+                 class="mt-2 block w-full text-sm text-gray-600
+                        file:mr-4 file:py-2 file:px-4
+                        file:rounded-md file:border-0
+                        file:text-sm file:font-semibold
+                        file:bg-amber-50 file:text-amber-700
+                        hover:file:bg-amber-100" />
+        </div>
       </div>
-      <div>
-        <label for="cmp-file2" class="block text-sm font-medium text-gray-700">Image 2 (JPG/PNG)</label>
-        <input id="cmp-file2" name="file2" type="file" accept=".jpg,.jpeg,.png" class="mt-1 block w-full" />
-      </div>
-    </div>
-    <button id="cmp-run" type="submit" class="bg-purple-600 hover:bg-purple-700 text-white font-semibold px-4 py-2 rounded focus-ring">Compare</button>
-  </form>
-  <div id="cmp-result" class="mt-6"></div>
+
+      <button id="cmp-run"
+        type="submit"
+        class="inline-flex items-center justify-center
+               bg-indigo-600 hover:bg-indigo-700
+               text-white font-semibold
+               px-5 py-2.5
+               rounded-lg
+               focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2
+               transition duration-200">
+  Run Comparison
+</button>
+    </form>
+  </div>
+
+  <!-- Results -->
+  <div id="cmp-result"></div>
+
 </div>
 {% endblock %}
+
 {% block scripts %}
 <script>
 (function(){
   const form = document.getElementById('cmp-form');
   const out = document.getElementById('cmp-result');
+
   form.addEventListener('submit', async (e)=>{
     e.preventDefault();
+
     const f1 = document.getElementById('cmp-file1').files[0];
     const f2 = document.getElementById('cmp-file2').files[0];
-    if(!f1||!f2){ UI.toast('Please select both images','error'); return; }
+
+    if(!f1 || !f2){
+      UI.toast('Please select both images','error');
+      return;
+    }
+
     UI.loading(true);
+
     try{
       const fd = new FormData();
-      fd.append('file1', f1); fd.append('file2', f2);
+      fd.append('file1', f1);
+      fd.append('file2', f2);
+
       const res = await fetch('/compare', { method:'POST', body: fd });
       const data = await res.json();
-      if(!res.ok){ throw new Error(data?.error || 'Server error'); }
+
+      if(!res.ok){
+        throw new Error(data?.error || 'Server error');
+      }
+
       const fmt = (v)=> typeof v==='number'&&!isNaN(v)? v.toFixed(2):'N/A';
-      const fmtPct = (v)=> typeof v==='number'&&!isNaN(v)? `${v.toFixed(1)}%`:'N/A';
-      const m1 = data?.metrics1||{}; const m2 = data?.metrics2||{}; const d = data?.percent_change||{};
+      const pct = (v)=> typeof v==='number'&&!isNaN(v)? v: null;
+
+      const m1 = data?.metrics1 || {};
+      const m2 = data?.metrics2 || {};
+      const d  = data?.percent_change || {};
+
+      function pctBlock(label,value){
+        const val = pct(value);
+        if(val===null) return `<div class="flex justify-between"><span>${label}</span><span>N/A</span></div>`;
+
+        const arrow = val>0 ? '↑' : val<0 ? '↓' : '–';
+        const color =
+          val>10 ? 'text-red-600' :
+          val<-10 ? 'text-green-600' :
+          'text-gray-700';
+
+        return `
+          <div class="flex justify-between">
+            <span>${label}</span>
+            <span class="font-semibold ${color}">
+              ${val.toFixed(1)}% ${arrow}
+            </span>
+          </div>`;
+      }
+
+      function metricCard(title,metrics){
+        return `
+          <div class="bg-white rounded-xl p-5 border border-gray-100 shadow-sm">
+            <h4 class="font-semibold text-gray-800 mb-4">${title}</h4>
+            <div class="space-y-3 text-sm">
+              ${metricRow('Asymmetry',metrics.Asymmetry)}
+              ${metricRow('Border',metrics.Border)}
+              ${metricRow('Color',metrics.Colour)}
+              ${metricRow('Diameter',metrics.Diameter)}
+            </div>
+          </div>`;
+      }
+
+      function metricRow(label,value){
+        const num = typeof value==='number'? value : null;
+        const pct = num!==null ? Math.min(100,Math.max(0,(num/10)*100)) : 0;
+        return `
+          <div>
+            <div class="flex justify-between">
+              <span class="text-gray-600">${label}</span>
+              <span class="font-medium text-amber-700">
+                ${num!==null?num.toFixed(2):'N/A'}
+              </span>
+            </div>
+            <div class="w-full bg-gray-200 rounded h-2 mt-1">
+              <div class="bg-amber-600 h-2 rounded"
+                   style="width:${pct}%"></div>
+            </div>
+          </div>`;
+      }
+
       out.innerHTML = `
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div><h3 class="font-medium text-gray-700 mb-2">Image 1</h3>${data?.image1?`<img src='${data.image1}' class='rounded shadow'/>`:''}</div>
-        <div><h3 class="font-medium text-gray-700 mb-2">Image 2</h3>${data?.image2?`<img src='${data.image2}' class='rounded shadow'/>`:''}</div>
-        <div class="bg-gray-50 rounded p-4">
-          <h3 class="text-lg font-semibold mb-2">% Change</h3>
-          <div class="space-y-1 text-sm">
-            <div class="flex justify-between"><span>Asymmetry</span><span>${fmtPct(d.Asymmetry)}</span></div>
-            <div class="flex justify-between"><span>Border</span><span>${fmtPct(d.Border)}</span></div>
-            <div class="flex justify-between"><span>Color</span><span>${fmtPct(d.Colour)}</span></div>
-            <div class="flex justify-between"><span>Diameter</span><span>${fmtPct(d.Diameter)}</span></div>
+        <div class="space-y-10">
+
+          <!-- Images + Percent Change -->
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+
+            <div>
+              <h3 class="font-medium text-gray-700 mb-2">Image 1</h3>
+              ${data?.image1 ? `<img src="${data.image1}" class="rounded-xl shadow-sm w-full"/>` : ''}
+            </div>
+
+            <div>
+              <h3 class="font-medium text-gray-700 mb-2">Image 2</h3>
+              ${data?.image2 ? `<img src="${data.image2}" class="rounded-xl shadow-sm w-full"/>` : ''}
+            </div>
+
+            <div class="bg-gray-50 rounded-xl p-5 border border-gray-100">
+              <h3 class="text-lg font-semibold mb-4 text-gray-800">
+                Percent Change
+              </h3>
+              <div class="space-y-3 text-sm">
+                ${pctBlock('Asymmetry',d.Asymmetry)}
+                ${pctBlock('Border',d.Border)}
+                ${pctBlock('Color',d.Colour)}
+                ${pctBlock('Diameter',d.Diameter)}
+              </div>
+            </div>
+
           </div>
-        </div>
-      </div>
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-        <div class="bg-white rounded p-3 shadow">
-          <h4 class="font-medium mb-2">Metrics (Image 1)</h4>
-          <div class="space-y-1 text-sm">
-            <div class="flex justify-between"><span>Asymmetry</span><span>${fmt(m1.Asymmetry)}</span></div>
-            <div class="flex justify-between"><span>Border</span><span>${fmt(m1.Border)}</span></div>
-            <div class="flex justify-between"><span>Color</span><span>${fmt(m1.Colour)}</span></div>
-            <div class="flex justify-between"><span>Diameter</span><span>${fmt(m1.Diameter)}</span></div>
+
+          <!-- Metric Comparison -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            ${metricCard('Metrics — Image 1',m1)}
+            ${metricCard('Metrics — Image 2',m2)}
           </div>
-        </div>
-        <div class="bg-white rounded p-3 shadow">
-          <h4 class="font-medium mb-2">Metrics (Image 2)</h4>
-          <div class="space-y-1 text-sm">
-            <div class="flex justify-between"><span>Asymmetry</span><span>${fmt(m2.Asymmetry)}</span></div>
-            <div class="flex justify-between"><span>Border</span><span>${fmt(m2.Border)}</span></div>
-            <div class="flex justify-between"><span>Color</span><span>${fmt(m2.Colour)}</span></div>
-            <div class="flex justify-between"><span>Diameter</span><span>${fmt(m2.Diameter)}</span></div>
-          </div>
-        </div>
-      </div>`;
-    }catch(err){ UI.toast(err.message,'error'); }
-    finally{ UI.loading(false); }
+
+        </div>`;
+    }
+    catch(err){
+      UI.toast(err.message,'error');
+    }
+    finally{
+      UI.loading(false);
+    }
   });
 })();
 </script>

@@ -1,25 +1,155 @@
 {% extends 'base.html' %}
 {% block content %}
-<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-  <a href="{{ url_for('single_view') }}" class="bg-white rounded-xl shadow p-6 focus-ring block">
-    <div class="text-gray-500 text-sm">Analyze</div>
-    <div class="text-2xl font-semibold mt-1">Single Mole</div>
-    <p class="text-gray-500 mt-2">Upload a single mole image and get ABCD metrics.</p>
-  </a>
-  <a href="{{ url_for('full_body_view') }}" class="bg-white rounded-xl shadow p-6 focus-ring block">
-    <div class="text-gray-500 text-sm">Screening</div>
-    <div class="text-2xl font-semibold mt-1">Full Body</div>
-    <p class="text-gray-500 mt-2">Detect and review all moles with interactive viewer.</p>
-  </a>
-  <a href="{{ url_for('compare_view') }}" class="bg-white rounded-xl shadow p-6 focus-ring block">
-    <div class="text-gray-500 text-sm">Compare</div>
-    <div class="text-2xl font-semibold mt-1">Single to Single</div>
-    <p class="text-gray-500 mt-2">Side-by-side ABCD comparison with percent change.</p>
-  </a>
-  <a href="{{ url_for('compare_full_body_view') }}" class="bg-white rounded-xl shadow p-6 focus-ring block">
-    <div class="text-gray-500 text-sm">Longitudinal</div>
-    <div class="text-2xl font-semibold mt-1">Full-Body Match</div>
-    <p class="text-gray-500 mt-2">Match moles across two full-body images.</p>
-  </a>
+<div class="max-w-7xl mx-auto px-6 py-10">
+
+  <!-- Header -->
+  <div class="mb-12">
+    <h1 class="text-3xl font-semibold text-gray-800">
+      Mole Analysis Workstation
+    </h1>
+    <p class="mt-2 text-gray-600">
+      Dermoscopic and Longitudinal Lesion Analysis Toolkit
+    </p>
+  </div>
+
+  <!-- ANALYSIS SECTION -->
+  <div class="mb-10">
+    <h2 class="text-xs uppercase tracking-wider text-gray-400 mb-4">
+      Analysis
+    </h2>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+      <!-- Single Mole -->
+      <a href="{{ url_for('single_view') }}"
+         class="bg-white rounded-2xl shadow-md hover:shadow-lg hover:-translate-y-[2px] transition-all duration-200 p-6 border-l-4 border-blue-500 focus-ring block">
+
+        <div class="text-blue-500 mb-4">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none"
+               viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+            <circle cx="11" cy="11" r="7"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+        </div>
+
+        <div class="text-gray-500 text-sm">Analyze</div>
+        <div class="text-xl font-semibold mt-1 text-gray-800">Single Mole</div>
+        <p class="text-gray-600 mt-2">
+          Upload a single mole image and compute ABCD metrics.
+        </p>
+
+        <div class="text-xs text-gray-400 mt-4">
+          Outputs: ABCD metrics • Segmentation mask • Overlay visualization
+        </div>
+      </a>
+
+      <!-- Full Body -->
+      <a href="{{ url_for('full_body_view') }}"
+         class="bg-white rounded-2xl shadow-md hover:shadow-lg hover:-translate-y-[2px] transition-all duration-200 p-6 border-l-4 border-indigo-500 focus-ring block">
+
+        <div class="text-indigo-500 mb-4">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none"
+               viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+            <path d="M12 2a4 4 0 014 4v3a4 4 0 01-8 0V6a4 4 0 014-4z"/>
+            <path d="M6 22v-5a6 6 0 0112 0v5"/>
+          </svg>
+        </div>
+
+        <div class="text-gray-500 text-sm">Screening</div>
+        <div class="text-xl font-semibold mt-1 text-gray-800">Full Body</div>
+        <p class="text-gray-600 mt-2">
+          Detect and review all moles with an interactive viewer.
+        </p>
+
+        <div class="text-xs text-gray-400 mt-4">
+          YOLO detection • Segmentation • Multi-lesion analysis
+        </div>
+      </a>
+
+    </div>
+  </div>
+
+  <!-- LONGITUDINAL & COMPARISON SECTION -->
+  <div class="mb-12">
+    <h2 class="text-xs uppercase tracking-wider text-gray-400 mb-4">
+      Longitudinal & Comparison
+    </h2>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+      <!-- Single to Single -->
+      <a href="{{ url_for('compare_view') }}"
+         class="bg-white rounded-2xl shadow-md hover:shadow-lg hover:-translate-y-[2px] transition-all duration-200 p-6 border-l-4 border-amber-500 focus-ring block">
+
+        <div class="text-amber-500 mb-4">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none"
+               viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+            <rect x="3" y="4" width="7" height="16" rx="1"></rect>
+            <rect x="14" y="4" width="7" height="16" rx="1"></rect>
+          </svg>
+        </div>
+
+        <div class="text-gray-500 text-sm">Compare</div>
+        <div class="text-xl font-semibold mt-1 text-gray-800">Single to Single</div>
+        <p class="text-gray-600 mt-2">
+          Side-by-side ABCD comparison with quantitative percent change.
+        </p>
+
+        <div class="text-xs text-gray-400 mt-4">
+          Percent change • Metric delta analysis
+        </div>
+      </a>
+
+      <!-- Full Body Match -->
+      <a href="{{ url_for('compare_full_body_view') }}"
+         class="bg-white rounded-2xl shadow-md hover:shadow-lg hover:-translate-y-[2px] transition-all duration-200 p-6 border-l-4 border-emerald-500 focus-ring block">
+
+        <div class="text-emerald-500 mb-4">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none"
+               viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+            <path d="M4 7h16M4 12h16M4 17h16"/>
+          </svg>
+        </div>
+
+        <div class="text-gray-500 text-sm">Longitudinal</div>
+        <div class="text-xl font-semibold mt-1 text-gray-800">Full-Body Match</div>
+        <p class="text-gray-600 mt-2">
+          Match lesions across two full-body images using feature correspondence.
+        </p>
+
+        <div class="text-xs text-gray-400 mt-4">
+          LoFTR pairing • Cross-image lesion mapping
+        </div>
+      </a>
+
+    </div>
+  </div>
+
+  <!-- SYSTEM STATUS PANEL -->
+  <div>
+    <h2 class="text-xs uppercase tracking-wider text-gray-400 mb-4">
+      System Status
+    </h2>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+
+      <div class="bg-white rounded-xl shadow-sm p-5">
+        <div class="text-sm text-gray-500">Detection Model</div>
+        <div class="mt-2 font-medium text-green-600">Loaded</div>
+      </div>
+
+      <div class="bg-white rounded-xl shadow-sm p-5">
+        <div class="text-sm text-gray-500">Segmentation Model</div>
+        <div class="mt-2 font-medium text-green-600">Active</div>
+      </div>
+
+      <div class="bg-white rounded-xl shadow-sm p-5">
+        <div class="text-sm text-gray-500">Last Analysis Run</div>
+        <div class="mt-2 font-medium text-gray-700">—</div>
+      </div>
+
+    </div>
+  </div>
+
 </div>
 {% endblock %}

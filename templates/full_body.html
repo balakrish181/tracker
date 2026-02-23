@@ -1,27 +1,75 @@
 {% extends 'base.html' %}
 {% block content %}
-<h2 class="text-2xl font-semibold mb-4">Full-Body Screening</h2>
-<div class="bg-white rounded-lg shadow p-6">
-  <form id="fb-form" class="space-y-4" aria-label="Full Body Upload">
-    <div>
-      <label for="fb-file" class="block text-sm font-medium text-gray-700">Image file (JPG/PNG)</label>
-      <input id="fb-file" name="file" type="file" accept=".jpg,.jpeg,.png" class="mt-1 block w-full" />
+<div class="max-w-7xl mx-auto px-6 py-10">
+
+  <!-- Page Header -->
+  <div class="mb-8">
+    <h1 class="text-3xl font-semibold text-gray-800">Full-Body Screening</h1>
+    <p class="text-gray-600 mt-2">
+      Multi-lesion detection with ABCD metric visualization.
+    </p>
+  </div>
+
+  <!-- Upload Card -->
+  <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-8">
+    <form id="fb-form" class="space-y-6" aria-label="Full Body Upload">
+      <div>
+        <label for="fb-file" class="block text-sm font-medium text-gray-700">
+          Image file (JPG/PNG)
+        </label>
+        <input id="fb-file"
+               name="file"
+               type="file"
+               accept=".jpg,.jpeg,.png"
+               class="mt-2 block w-full text-sm text-gray-600
+                      file:mr-4 file:py-2 file:px-4
+                      file:rounded-md file:border-0
+                      file:text-sm file:font-semibold
+                      file:bg-indigo-50 file:text-indigo-700
+                      hover:file:bg-indigo-100" />
+      </div>
+
+      <button id="fb-run"
+              type="submit"
+              class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-5 py-2.5 rounded-lg focus-ring transition">
+        Run Screening
+      </button>
+    </form>
+  </div>
+
+  <!-- Results View -->
+  <div id="fb-view" class="hidden">
+
+    <!-- Controls -->
+    <div class="flex items-center space-x-6 mb-4 text-sm text-gray-600">
+      <label class="flex items-center space-x-2 cursor-pointer">
+        <input id="toggle-boxes" type="checkbox" checked />
+        <span>Show boxes</span>
+      </label>
+      <label class="flex items-center space-x-2 cursor-pointer">
+        <input id="toggle-labels" type="checkbox" checked />
+        <span>Show labels</span>
+      </label>
     </div>
-    <button id="fb-run" type="submit" class="bg-green-600 hover:bg-green-700 text-white font-semibold px-4 py-2 rounded focus-ring">Analyze</button>
-  </form>
-  <div id="fb-view" class="mt-6 hidden">
-    <div class="mb-3 flex items-center space-x-4">
-      <label class="flex items-center space-x-2"><input id="toggle-boxes" type="checkbox" checked /><span>Show boxes</span></label>
-      <label class="flex items-center space-x-2"><input id="toggle-labels" type="checkbox" checked /><span>Show labels</span></label>
+
+    <!-- Image Panel -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+      <div class="relative" id="img-wrap">
+        <img id="fb-img" src="" alt="full body"
+             class="rounded-lg shadow-sm w-full" />
+        <div id="fb-boxes"
+             class="absolute inset-0"
+             style="pointer-events:none"></div>
+      </div>
     </div>
-    <div class="relative" id="img-wrap">
-      <img id="fb-img" src="" alt="full body" class="rounded shadow w-full" />
-      <div id="fb-boxes" class="absolute inset-0" style="pointer-events:none"></div>
-    </div>
-    <div id="fb-details" class="mt-6"></div>
+
+    <!-- Details Panel -->
+    <div id="fb-details" class="mt-8"></div>
+
   </div>
 </div>
 {% endblock %}
+
 {% block scripts %}
 <script>
 (function(){
@@ -40,7 +88,8 @@
     if(!file){ UI.toast('Please select an image file','error'); return; }
     UI.loading(true);
     try{
-      const fd = new FormData(); fd.append('file', file);
+      const fd = new FormData();
+      fd.append('file', file);
       const res = await fetch('/analyze_full_body', { method:'POST', body: fd });
       const data = await res.json();
       if(!res.ok){ throw new Error(data?.error || 'Server error'); }
@@ -48,58 +97,131 @@
       current = Array.isArray(data.results) ? data.results : [];
       view.classList.remove('hidden');
       drawBoxes();
-    }catch(err){ UI.toast(err.message,'error'); }
-    finally{ UI.loading(false); }
+    }catch(err){
+      UI.toast(err.message,'error');
+    }finally{
+      UI.loading(false);
+    }
   });
 
+  function computeRisk(m){
+    const vals = [
+      m?.analysis?.Asymmetry,
+      m?.analysis?.Border,
+      m?.analysis?.Colour,
+      m?.analysis?.Diameter
+    ].filter(v=>typeof v==='number'&&!isNaN(v));
+
+    if(!vals.length) return {level:'low',avg:0};
+    const avg = vals.reduce((a,b)=>a+b,0)/vals.length;
+    const level = avg>7?'high':avg>4?'medium':'low';
+    return {level,avg};
+  }
+
   function drawBoxes(){
-    boxes.innerHTML = '';
-    boxes.style.display = tBoxes.checked ? 'block' : 'none';
-    const add = (m, i)=>{
-      if(!Array.isArray(m.bbox) || m.bbox.length!==4) return;
-      const [x1,y1,x2,y2] = m.bbox;
-      const el = document.createElement('div');
+    boxes.innerHTML='';
+    boxes.style.display = tBoxes.checked ? 'block':'none';
+
+    current.forEach((m,i)=>{
+      if(!Array.isArray(m.bbox)||m.bbox.length!==4) return;
+      const [x1,y1,x2,y2]=m.bbox;
+      const el=document.createElement('div');
       el.style.position='absolute';
-      el.style.left = (x1*100)+'%';
-      el.style.top = (y1*100)+'%';
-      el.style.width = ((x2-x1)*100)+'%';
-      el.style.height = ((y2-y1)*100)+'%';
-      el.style.border = '2px solid #3b82f6';
-      el.style.pointerEvents = 'auto';
-      if (tLabels.checked){
-        const lbl = document.createElement('span');
-        lbl.textContent = String(i+1);
+      el.style.left=(x1*100)+'%';
+      el.style.top=(y1*100)+'%';
+      el.style.width=((x2-x1)*100)+'%';
+      el.style.height=((y2-y1)*100)+'%';
+
+      const risk=computeRisk(m).level;
+      el.style.border=`2px solid ${
+        risk==='high'?'#dc2626':
+        risk==='medium'?'#d97706':'#16a34a'
+      }`;
+      el.style.pointerEvents='auto';
+
+      if(tLabels.checked){
+        const lbl=document.createElement('span');
+        lbl.textContent=i+1;
         lbl.style.position='absolute';
-        lbl.style.left='-6px'; lbl.style.top='-10px';
-        lbl.style.background='#3b82f6'; lbl.style.color='#fff'; lbl.style.fontSize='12px';
-        lbl.style.padding='2px 6px'; lbl.style.borderRadius='12px';
+        lbl.style.left='-6px';
+        lbl.style.top='-10px';
+        lbl.style.background='#4f46e5';
+        lbl.style.color='#fff';
+        lbl.style.fontSize='12px';
+        lbl.style.padding='2px 6px';
+        lbl.style.borderRadius='9999px';
         el.appendChild(lbl);
       }
-      el.addEventListener('click', (ev)=>{ ev.stopPropagation(); showDetails(m, i); });
-      boxes.appendChild(el);
-    };
-    current.forEach(add);
-  }
-  tBoxes.addEventListener('change', drawBoxes);
-  tLabels.addEventListener('change', drawBoxes);
 
-  function showDetails(m, idx){
-    const A = m?.analysis?.Asymmetry, B=m?.analysis?.Border, C=m?.analysis?.Colour, D=m?.analysis?.Diameter;
-    const fmt = (v)=> typeof v==='number'&&!isNaN(v)? v.toFixed(2):'N/A';
-    details.innerHTML = `
-      <div class="bg-gray-50 rounded p-4">
-        <div class="flex items-center justify-between mb-3">
-          <h3 class="text-lg font-semibold">Mole #${idx+1}</h3>
-          ${m?.cropped_image_path? `<a class='text-blue-600 underline' href='${m.cropped_image_path}' target='_blank' rel='noopener'>Open crop</a>`:''}
-        </div>
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-          <div class="bg-white rounded p-3 shadow"><div class="text-gray-600">Asymmetry</div><div class="text-xl font-bold text-blue-700">${fmt(A)}</div></div>
-          <div class="bg-white rounded p-3 shadow"><div class="text-gray-600">Border</div><div class="text-xl font-bold text-blue-700">${fmt(B)}</div></div>
-          <div class="bg-white rounded p-3 shadow"><div class="text-gray-600">Color</div><div class="text-xl font-bold text-blue-700">${fmt(C)}</div></div>
-          <div class="bg-white rounded p-3 shadow"><div class="text-gray-600">Diameter</div><div class="text-xl font-bold text-blue-700">${fmt(D)}</div></div>
-        </div>
-      </div>`
+      el.addEventListener('click',(ev)=>{
+        ev.stopPropagation();
+        showDetails(m,i);
+      });
+
+      boxes.appendChild(el);
+    });
   }
+
+  tBoxes.addEventListener('change',drawBoxes);
+  tLabels.addEventListener('change',drawBoxes);
+
+  function metricBlock(label,value){
+    const pct = typeof value==='number'&&!isNaN(value)
+      ? Math.min(100,Math.max(0,(value/10)*100))
+      : 0;
+
+    return `
+      <div class="bg-white rounded-xl p-4 border border-gray-100 shadow-sm">
+        <div class="text-sm text-gray-500">${label}</div>
+        <div class="text-xl font-semibold text-indigo-700 mt-1">
+          ${typeof value==='number'?value.toFixed(2):'N/A'}
+        </div>
+        <div class="w-full bg-gray-200 rounded h-2 mt-2">
+          <div class="bg-indigo-600 h-2 rounded"
+               style="width:${pct}%"></div>
+        </div>
+      </div>`;
+  }
+
+  function showDetails(m,idx){
+    const risk=computeRisk(m);
+    const badgeClass =
+      risk.level==='high'?'bg-red-100 text-red-700':
+      risk.level==='medium'?'bg-amber-100 text-amber-700':
+      'bg-green-100 text-green-700';
+
+    details.innerHTML=`
+      <div class="bg-gray-50 rounded-xl p-6 border border-gray-100">
+        <div class="flex items-center justify-between mb-6">
+          <h3 class="text-xl font-semibold">
+            Mole #${idx+1}
+          </h3>
+          <span class="text-xs font-semibold px-3 py-1 rounded-full ${badgeClass}">
+            ${risk.level.toUpperCase()} RISK
+          </span>
+        </div>
+
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+          ${metricBlock('Asymmetry',m?.analysis?.Asymmetry)}
+          ${metricBlock('Border',m?.analysis?.Border)}
+          ${metricBlock('Color',m?.analysis?.Colour)}
+          ${metricBlock('Diameter',m?.analysis?.Diameter)}
+        </div>
+
+        ${
+          m?.cropped_image_path
+          ? `<div class="mt-6">
+               <a href="${m.cropped_image_path}"
+                  target="_blank"
+                  class="text-indigo-600 underline text-sm">
+                  Open Cropped Lesion
+               </a>
+             </div>`
+          : ''
+        }
+      </div>`;
+  }
+
 })();
 </script>
 {% endblock %}
