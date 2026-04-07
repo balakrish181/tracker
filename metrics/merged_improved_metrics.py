@@ -25,8 +25,6 @@ class MoleAnalyzer:
         self.mask = imageio.imread(binary_mask_path)
         self.mask = self.prepare_mask(self.mask)
         self.masked_img = self.mask_image(self.original_img, self.mask)
-        self.result_img_path = "Result.jpg"
-        imageio.imwrite(self.result_img_path, self.masked_img)
 
     @staticmethod
     def prepare_mask(mask):
@@ -78,12 +76,12 @@ class MoleAnalyzer:
             Asymmetry score in the range [0, 1]
         """
         if np.sum(mask_uint8) == 0:
-            return 0.0
+            return None  # No lesion pixels — asymmetry is undefined, not "perfect"
 
         # Find centroid
         M = cv2.moments(mask_uint8)
         if M["m00"] == 0:  # Should not happen if sum > 0, but as a safeguard
-            return 0.0
+            return None
         cx = int(M["m10"] / M["m00"])
         cy = int(M["m01"] / M["m00"])
 
@@ -177,22 +175,25 @@ class MoleAnalyzer:
         # Find contours of the lesion
         contours, _ = cv2.findContours(mask_uint8, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         if not contours:
-            return 0, None, None, None
+            return 0
 
         # Get the largest contour (assumed to be the lesion)
         contour = max(contours, key=cv2.contourArea)
 
-        # Extract contour points
-        contour_points = contour.reshape(-1, 2)  # Shape: (N, 2) where N is number of points
+        # Use convex hull to reduce points — Feret diameter is always between hull vertices.
+        # This turns O(n²) on thousands of contour points into O(k²) on typically < 100 hull points.
+        hull = cv2.convexHull(contour)
+        hull_points = hull.reshape(-1, 2)
 
-        # Calculate distances between all pairs of points
+        if len(hull_points) < 2:
+            return 0
+
+        # Calculate distances between all pairs of hull points
         max_distance = 0
-        pt1, pt2 = None, None
-        for p1, p2 in combinations(contour_points, 2):
+        for p1, p2 in combinations(hull_points, 2):
             distance = np.sqrt((p1[0] - p2[0])**2 + (p1[1] - p2[1])**2)
             if distance > max_distance:
                 max_distance = distance
-                pt1, pt2 = p1, p2
 
         return max_distance
 
@@ -246,24 +247,41 @@ class MoleAnalyzer:
         
         return total_variance
 
+    # ABCD Scaling Constants
+    # -----------------------
+    # These scaling factors convert raw metric values into display-range scores.
+    # IMPORTANT: These are NOT clinically calibrated thresholds. They are
+    # convenience scalings chosen to bring metrics into comparable numeric ranges.
+    # Clinical validation against labelled dermoscopy datasets is required before
+    # interpreting these scores as diagnostic indicators.
+    #
+    # Asymmetry raw [0, 1] * 10  -> display [0, 10]
+    # Border raw [1, ~5+]  / 10 -> display [0.1, ~0.5]
+    # Diameter raw (pixels) / 10 -> display (pixels/10)
+    # Colour (HSV SD or LAB var) -> display (scaled down)
+    ASYMMETRY_SCALE = 10.0
+    BORDER_SCALE = 10.0
+    DIAMETER_SCALE = 10.0
+    COLOUR_LAB_SCALE = 100.0
+
     def analyze(self, show=True):
         img = self.masked_img
         mask_uint8 = self.mask.astype(np.uint8) * 255
 
         # Area calculation
         _, A = self.calculate_area(self.mask)
-        
-        # Asymmetry calculation
+
+        # Asymmetry calculation (None means mask was empty — should not happen after upstream checks)
         asymmetry_raw = self.compute_asymmetry(mask_uint8)
-        Asymmetry = asymmetry_raw * 10  # Scale to 0-10 range
+        Asymmetry = (asymmetry_raw * self.ASYMMETRY_SCALE) if asymmetry_raw is not None else None
 
         # Border irregularity calculation
         border_raw = self.border_irregularity_index(mask_uint8)
-        Border = border_raw / 10  # Scale to match original scaling
+        Border = border_raw / self.BORDER_SCALE
 
         # Diameter calculation (Feret diameter)
         diameter_raw = self.calculate_diameter(mask_uint8)
-        Diameter = diameter_raw / 10  # Scale to match original scaling
+        Diameter = diameter_raw / self.DIAMETER_SCALE
 
         # Color variance calculation
         if len(img.shape) == 3:
@@ -272,7 +290,7 @@ class MoleAnalyzer:
         else:
             # For grayscale images or if HSV conversion is not applicable
             color_variance = self.color_space_analysis(self.original_img, self.mask)
-            Colour = color_variance / 100  # Scaling to match original method
+            Colour = color_variance / self.COLOUR_LAB_SCALE
 
         if show:
             print(f"Asymmetry: {Asymmetry:.2f}")
@@ -285,14 +303,23 @@ class MoleAnalyzer:
             plt.show()
             
         # Convert NumPy types to native Python types for JSON serialization
-        A_py = int(A) if isinstance(A, np.integer) else float(A)
-        asymmetry_raw_py = float(asymmetry_raw) if isinstance(asymmetry_raw, (np.float32, np.float64)) else asymmetry_raw
-        Asymmetry_py = float(Asymmetry) if isinstance(Asymmetry, (np.float32, np.float64)) else Asymmetry
-        Border_py = float(Border) if isinstance(Border, (np.float32, np.float64)) else Border
-        border_raw_py = float(border_raw) if isinstance(border_raw, (np.float32, np.float64)) else border_raw
-        Diameter_py = float(Diameter) if isinstance(Diameter, (np.float32, np.float64)) else Diameter
-        diameter_raw_py = float(diameter_raw) if isinstance(diameter_raw, (np.float32, np.float64)) else diameter_raw
-        Colour_py = float(Colour) if isinstance(Colour, (np.float32, np.float64)) else Colour
+        def _to_py(val):
+            if val is None:
+                return None
+            if isinstance(val, np.integer):
+                return int(val)
+            if isinstance(val, (np.floating, np.float32, np.float64)):
+                return float(val)
+            return val
+
+        A_py = _to_py(A)
+        asymmetry_raw_py = _to_py(asymmetry_raw)
+        Asymmetry_py = _to_py(Asymmetry)
+        Border_py = _to_py(Border)
+        border_raw_py = _to_py(border_raw)
+        Diameter_py = _to_py(Diameter)
+        diameter_raw_py = _to_py(diameter_raw)
+        Colour_py = _to_py(Colour)
 
         return {
             "Asymmetry": Asymmetry_py,

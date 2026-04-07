@@ -68,7 +68,23 @@ class IntegratedMolePipeline:
             
         # Step 1: Generate binary mask with the segmentation model
         binary_mask = self.segmentation_model.predict(image_path)
-        
+
+        # Mask quality check: reject trivially empty or near-full masks
+        mask_pixels = np.sum(binary_mask > 127)
+        total_pixels = binary_mask.shape[0] * binary_mask.shape[1]
+        mask_ratio = mask_pixels / total_pixels if total_pixels > 0 else 0
+
+        if mask_pixels == 0:
+            raise ValueError(
+                "Segmentation produced an empty mask (no lesion detected). "
+                "The image may not contain a visible mole or the model failed."
+            )
+        if mask_ratio > 0.90:
+            raise ValueError(
+                f"Segmentation mask covers {mask_ratio:.0%} of the image, which likely indicates "
+                "a segmentation failure rather than a real lesion. Check input image quality."
+            )
+
         # Get base filename without extension
         base_name = Path(image_path).stem
         

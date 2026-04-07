@@ -1,29 +1,29 @@
 import torch
 import cv2
+import logging
 import numpy as np
 from pathlib import Path
 import sys
 
+logger = logging.getLogger(__name__)
+
+DEFAULT_LOFTR_WEIGHTS = "weights/outdoor_ds.ckpt"
+
 class LoFTRMatcher:
     def __init__(self, weights_path: str = None):
         sys.path.append(str(Path(__file__).resolve().parent))
-        from match_dir.src.loftr import LoFTR,default_cfg
-        #from match_dir.src.config.default import get_cfg_defaults
+        from match_dir.src.loftr import LoFTR, default_cfg
 
-        #self.cfg = get_cfg_defaults()
-        #self.cfg.LOFTR.MATCH_COARSE.MATCH_TYPE = 'dual_softmax'
         self.matcher = LoFTR(config=default_cfg)
 
-        #if weights_path:
-            
-        self.matcher.load_state_dict(torch.load("weights/outdoor_ds.ckpt")['state_dict'])
-        
-        # else:
-        #     weights_path = torch.hub.download_url_to_file(
-        #         'https://github.com/zju3dv/LoFTR/releases/download/weights/indoor_ds.ckpt',
-        #         'loftr_indoor.ckpt')
-        #     self.matcher.load_state_dict(torch.load(weights_path)['state_dict'])
+        weights = weights_path or DEFAULT_LOFTR_WEIGHTS
+        if not Path(weights).exists():
+            raise FileNotFoundError(
+                f"LoFTR weights not found at '{weights}'. "
+                "Download outdoor_ds.ckpt and place it in the weights/ directory."
+            )
 
+        self.matcher.load_state_dict(torch.load(weights, map_location="cpu")['state_dict'])
         self.matcher = self.matcher.eval().cuda() if torch.cuda.is_available() else self.matcher.eval()
 
     def match(self, image_path1: str, image_path2: str, yolov5_centers: list = None, radius: int = 20):

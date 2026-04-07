@@ -10,6 +10,9 @@ import platform
 from realesrgan_upscaler import DermaRealESRGANx2
 
 
+MIN_DETECTION_CONFIDENCE = 0.25
+MIN_DETECTION_SIZE_PX = 8  # Minimum bbox dimension in absolute pixels
+
 class FullBodyMoleAnalysisPipeline:
     def __init__(self, yolo_model_path, segmentation_model_path, patch_size=1280, patch_overlap=0.2):
         """
@@ -232,32 +235,50 @@ class FullBodyMoleAnalysisPipeline:
 
         for i, det in enumerate(detections):
             x1, y1, x2, y2, conf, cls = det
-            
+
+            # Skip low-confidence detections
+            if conf < MIN_DETECTION_CONFIDENCE:
+                logging.info(f"Skipping mole_{i+1}: confidence {conf:.3f} below threshold {MIN_DETECTION_CONFIDENCE}")
+                continue
+
             # Convert normalized coordinates to absolute coordinates
             abs_x1 = int(x1 * w)
             abs_y1 = int(y1 * h)
             abs_x2 = int(x2 * w)
             abs_y2 = int(y2 * h)
+
+            # Skip detections that are too small to analyze meaningfully
+            det_w = abs_x2 - abs_x1
+            det_h = abs_y2 - abs_y1
+            if det_w < MIN_DETECTION_SIZE_PX or det_h < MIN_DETECTION_SIZE_PX:
+                logging.info(f"Skipping mole_{i+1}: detection too small ({det_w}x{det_h}px)")
+                continue
             target_size = 512
             # Crop the mole region
             if padding:
-                cropped_img = img[abs_y1+25:abs_y2-25, abs_x1+25:abs_x2-25]
-                
-                pad_top = max(0, (target_size - current_h) // 2)
-                pad_bottom = max(0, target_size - current_h - pad_top)
-                pad_left = max(0, (target_size - current_w) // 2)
-                pad_right = max(0, target_size - current_w - pad_left)
-
+                # Shrink crop by margin to remove edge artifacts
+                margin = 25
+                py1 = min(abs_y1 + margin, abs_y2)
+                py2 = max(abs_y2 - margin, py1)
+                px1 = min(abs_x1 + margin, abs_x2)
+                px2 = max(abs_x2 - margin, px1)
+                cropped_img = img[py1:py2, px1:px2]
             else:
                 cropped_img = img[abs_y1:abs_y2, abs_x1:abs_x2]
-                pad_top = 0
-                pad_bottom = 0
-                pad_left = 0
-                pad_right = 0
 
             # Get current dimensions
-
             current_h, current_w = cropped_img.shape[:2]
+
+            # Skip if crop is empty (detection too small or margin ate it)
+            if current_h == 0 or current_w == 0:
+                logging.warning(f"Skipping mole_{i+1}: crop is empty ({current_w}x{current_h})")
+                continue
+
+            # Calculate padding to reach target_size
+            pad_top = max(0, (target_size - current_h) // 2)
+            pad_bottom = max(0, target_size - current_h - pad_top)
+            pad_left = max(0, (target_size - current_w) // 2)
+            pad_right = max(0, target_size - current_w - pad_left)
 
 
             # If the cropped image is larger than 512x512, resize it to fit

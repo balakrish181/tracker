@@ -1,0 +1,19 @@
+[
+  "tests/test_abcd_metrics.py::TestAnalyzeIntegration::test_analyze_returns_all_keys",
+  "tests/test_abcd_metrics.py::TestAnalyzeIntegration::test_scaled_scores_are_consistent_with_raw",
+  "tests/test_abcd_metrics.py::TestAsymmetry::test_empty_mask_returns_none",
+  "tests/test_abcd_metrics.py::TestAsymmetry::test_half_circle_has_high_asymmetry",
+  "tests/test_abcd_metrics.py::TestAsymmetry::test_perfect_circle_has_low_asymmetry",
+  "tests/test_abcd_metrics.py::TestBorderIrregularity::test_circle_has_border_near_one",
+  "tests/test_abcd_metrics.py::TestBorderIrregularity::test_empty_mask_returns_zero",
+  "tests/test_abcd_metrics.py::TestBorderIrregularity::test_star_shape_has_high_irregularity",
+  "tests/test_abcd_metrics.py::TestColourAnalysis::test_multicolor_has_high_variance",
+  "tests/test_abcd_metrics.py::TestColourAnalysis::test_uniform_color_has_low_variance",
+  "tests/test_abcd_metrics.py::TestDiameter::test_circle_diameter_matches_drawn_radius",
+  "tests/test_abcd_metrics.py::TestDiameter::test_empty_mask_returns_zero",
+  "tests/test_abcd_metrics.py::TestDiameter::test_horizontal_rectangle_diameter",
+  "tests/test_abcd_metrics.py::TestSharedHelpers::test_percent_change_basic",
+  "tests/test_abcd_metrics.py::TestSharedHelpers::test_percent_change_from_zero",
+  "tests/test_abcd_metrics.py::TestSharedHelpers::test_percent_change_none_values",
+  "tests/test_abcd_metrics.py::TestSharedHelpers::test_safe_get_metric"
+]

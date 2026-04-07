@@ -1,4 +1,5 @@
 import os
+import logging
 from pathlib import Path
 import cv2
 import numpy as np
@@ -6,6 +7,7 @@ import numpy as np
 from full_body_pipeline import FullBodyMoleAnalysisPipeline
 from integrated_pipeline import IntegratedMolePipeline
 from loftr.loftr_matcher import LoFTRMatcher
+from constants import ABCD_KEYS, safe_get_metric, percent_change
 import tempfile
 from realesrgan_upscaler import DermaRealESRGANx2
 
@@ -32,7 +34,6 @@ class LoFTRFullBodyComparator:
         img2 = cv2.imread(img2_path)
         h1, w1 = img1.shape[:2]
         h2, w2 = img2.shape[:2]
-        print(h1,w1)
         c1 = self._bbox_centers_px(dets1, w1, h1)
         c2 = self._bbox_centers_px(dets2, w2, h2)
 
@@ -65,7 +66,7 @@ class LoFTRFullBodyComparator:
             pad_w1 = (-w1r) % 8
             if pad_h1 or pad_w1:
                 rimg1 = cv2.copyMakeBorder(rimg1, 0, pad_h1, 0, pad_w1, cv2.BORDER_CONSTANT, value=(0,0,0))
-            print(rimg1.shape)
+            logging.debug(f"LoFTR input1 shape: {rimg1.shape}")
             t1 = tempfile.NamedTemporaryFile(suffix='.jpg', delete=False)
             t1.close()
             cv2.imwrite(t1.name, rimg1)
@@ -85,12 +86,20 @@ class LoFTRFullBodyComparator:
             pad_w2 = (-w2r) % 8
             if pad_h2 or pad_w2:
                 rimg2 = cv2.copyMakeBorder(rimg2, 0, pad_h2, 0, pad_w2, cv2.BORDER_CONSTANT, value=(0,0,0))
-            print(rimg2.shape)
+            logging.debug(f"LoFTR input2 shape: {rimg2.shape}")
             t2 = tempfile.NamedTemporaryFile(suffix='.jpg', delete=False)
             t2.close()
             cv2.imwrite(t2.name, rimg2)
             use_path2 = t2.name
             tmp2 = t2.name
+
+        # Warn if the two images have very different scales — LoFTR pixel matching degrades
+        scale_ratio = max(s1, s2) / min(s1, s2) if min(s1, s2) > 0 else 1.0
+        if scale_ratio > 1.5:
+            logging.warning(
+                f"Images have very different effective scales (ratio {scale_ratio:.2f}). "
+                "LoFTR mole pairing may be unreliable. Try images of similar resolution."
+            )
 
         scaled_radius = max(5, int(round(radius_px * s1)))
 
@@ -114,18 +123,19 @@ class LoFTRFullBodyComparator:
                 except Exception:
                     pass
         pairs = {}
+        if len(mk0) == 0 or len(mk1) == 0 or len(c2_scaled) == 0:
+            logging.warning("LoFTR returned no matches or no detections in image2 — cannot pair moles")
+            return []
+        c2arr = np.array(c2_scaled)
         for i, (cx, cy) in enumerate(c1_scaled):
-            if len(mk0) == 0:
-                continue
             d = np.linalg.norm(mk0 - np.array([cx, cy]), axis=1)
             idxs = np.where(d <= scaled_radius)[0]
             if len(idxs) == 0:
                 continue
             target_pts = mk1[idxs]
-            if len(c2) == 0:
-                continue
-            c2arr = np.array(c2_scaled)
             d2 = np.linalg.norm(target_pts[:, None, :] - c2arr[None, :, :], axis=2)
+            if d2.size == 0:
+                continue
             nearest = np.argmin(d2, axis=1)
             vals, counts = np.unique(nearest, return_counts=True)
             j = int(vals[np.argmax(counts)])
@@ -179,17 +189,7 @@ class LoFTRFullBodyComparator:
                 continue
             m1 = self.integrated.process_image(c1_path, save_intermediate=True, output_dir=output_dir)
             m2 = self.integrated.process_image(c2_path, save_intermediate=True, output_dir=output_dir)
-            def g(d, k):
-                v = d.get(k)
-                return float(v) if isinstance(v, (int,float)) else None
-            def pct(a, b):
-                if a is None or b is None:
-                    return None
-                if a == 0:
-                    return None
-                return ((b - a) / a) * 100.0
-            keys = ["Asymmetry","Border","Colour","Diameter"]
-            pct_dict = {k: pct(g(m1,k), g(m2,k)) for k in keys}
+            pct_dict = {k: percent_change(safe_get_metric(m1, k), safe_get_metric(m2, k)) for k in ABCD_KEYS}
             results.append({
                 "a_index": int(a_idx),
                 "b_index": int(b_idx),

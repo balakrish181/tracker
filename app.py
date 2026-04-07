@@ -12,7 +12,10 @@ import numpy as np
 from datetime import datetime
 import pathlib
 
-# Monkey patch for Windows to handle PosixPath issue with YOLO model loading
+# Workaround: YOLOv5 model checkpoints saved on Linux embed PosixPath objects.
+# When loading on Windows, torch.load() fails because PosixPath doesn't exist.
+# This monkey-patch maps PosixPath -> WindowsPath so unpickling succeeds.
+# TODO: Long-term fix is to re-save model weights with pathlib.Path on a cross-platform basis.
 import platform
 if platform.system() == "Windows":
     pathlib.PosixPath = pathlib.WindowsPath
@@ -41,8 +44,12 @@ UPLOAD_FOLDER = 'uploads'
 OUTPUT_FOLDER = 'outputs'
 FULL_BODY_OUTPUT_FOLDER = 'full_body_output'
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg'}
+MAX_UPLOAD_SIZE_MB = 50
+MIN_IMAGE_DIM = 32
+MAX_IMAGE_DIM = 20000
 
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+app.config['MAX_CONTENT_LENGTH'] = MAX_UPLOAD_SIZE_MB * 1024 * 1024  # Limit upload size
 app.config['OUTPUT_FOLDER'] = OUTPUT_FOLDER
 app.config['FULL_BODY_OUTPUT_FOLDER'] = FULL_BODY_OUTPUT_FOLDER
 
@@ -67,6 +74,18 @@ loftr_comparator = LoFTRFullBodyComparator(
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+def validate_image(filepath):
+    """Validate that a saved file is a readable image with sane dimensions."""
+    img = cv2.imread(filepath)
+    if img is None:
+        return False, "File could not be read as an image. It may be corrupt or not a real image file."
+    h, w = img.shape[:2]
+    if h < MIN_IMAGE_DIM or w < MIN_IMAGE_DIM:
+        return False, f"Image is too small ({w}x{h}). Minimum dimension is {MIN_IMAGE_DIM}px."
+    if h > MAX_IMAGE_DIM or w > MAX_IMAGE_DIM:
+        return False, f"Image is too large ({w}x{h}). Maximum dimension is {MAX_IMAGE_DIM}px."
+    return True, None
 
 @app.route('/')
 def home():
@@ -102,7 +121,11 @@ def analyze_full_body():
         filename = f"{timestamp}_{file.filename}"
         filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
         file.save(filepath)
-        
+
+        valid, err = validate_image(filepath)
+        if not valid:
+            return jsonify({'error': err}), 400
+
         try:
             results = full_body_pipeline.process_full_body_image(
                 filepath, 
@@ -149,7 +172,11 @@ def analyze():
         filename = f"{timestamp}_{file.filename}"
         filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
         file.save(filepath)
-        
+
+        valid, err = validate_image(filepath)
+        if not valid:
+            return jsonify({'error': err}), 400
+
         try:
             # Process the image
             results = pipeline.process_image(filepath, save_intermediate=True, output_dir=app.config['OUTPUT_FOLDER'])
@@ -256,7 +283,8 @@ def full_body_output_file(filename):
     return send_from_directory(app.config['FULL_BODY_OUTPUT_FOLDER'], filename)
 
 if __name__ == '__main__':
-    app.run(debug=True, port = 5001)
+    debug_mode = os.environ.get('FLASK_DEBUG', '0') == '1'
+    app.run(debug=debug_mode, port=5001)
 
 
 
